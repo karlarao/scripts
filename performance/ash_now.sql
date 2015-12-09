@@ -15,5 +15,7 @@ COL program FORMAT A45
 @@ashtop inst_id,wait_class,event,username,sql_id session_type='FOREGROUND' sysdate-5/24/60 sysdate
 
 -- session and sqls
-@@ashtop inst_id,session_id,username,program,sql_id,sql_plan_hash_value,plsql_entry_object_id session_type='FOREGROUND' sysdate-5/24/60 sysdate
+@@ashtop inst_id,session_id,username,program,sql_id,sql_plan_hash_value,plsql_entry_object_id,blocking_session,event session_type='FOREGROUND' sysdate-5/24/60 sysdate
 
+-- to get what part of the execution plan the SQL is spending most of its time 
+@@ashtop inst_id,session_id,username,program,sql_id,sql_plan_hash_value,plsql_entry_object_id,sql_plan_operation,sql_plan_options,sql_plan_line_id session_type='FOREGROUND' sysdate-5/24/60 sysdate

@@ -23,6 +23,10 @@ COL program FORMAT A45
 @@dashtop instance_number,wait_class,event,username,sql_id session_type='FOREGROUND' "TIMESTAMP'&_start_time'" "TIMESTAMP'&_end_time'"
 
 -- session and sqls
-@@dashtop instance_number,session_id,username,program,sql_id,sql_plan_hash_value,plsql_entry_object_id session_type='FOREGROUND' "TIMESTAMP'&_start_time'" "TIMESTAMP'&_end_time'"
+@@dashtop instance_number,session_id,username,program,sql_id,sql_plan_hash_value,plsql_entry_object_id,blocking_session,event session_type='FOREGROUND' "TIMESTAMP'&_start_time'" "TIMESTAMP'&_end_time'"
+
+
+-- to get what part of the execution plan the SQL is spending most of its time 
+@@dashtop instance_number,session_id,username,program,sql_id,sql_plan_hash_value,plsql_entry_object_id,sql_plan_operation,sql_plan_options,sql_plan_line_id session_type='FOREGROUND' "TIMESTAMP'&_start_time'" "TIMESTAMP'&_end_time'"
 
 
