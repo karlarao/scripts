@@ -20,7 +20,7 @@ select lower(instance_name) name from v$instance;
 
 set termout off
 set markup html on
-spool exadisktopo2-&_instname.html
+spool exadisktopo2-&_instname..html
 
 COL cellname            HEAD CELLNAME       FOR A20
 COL celldisk_name       HEAD CELLDISK       FOR A30

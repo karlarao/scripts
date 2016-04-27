@@ -19,7 +19,7 @@ select lower(instance_name) name from v$instance;
 
 set termout off
 set markup html on
-spool cellpdx-&_instname.html
+spool cellpdx-&_instname..html
 
 COL cv_cellname       HEAD CELLNAME         FOR A20
 COL cv_cellversion    HEAD CELLSRV_VERSION  FOR A20
