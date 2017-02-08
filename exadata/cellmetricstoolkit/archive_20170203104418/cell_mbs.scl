@@ -1,0 +1,2 @@
+set dateformat local
+LIST METRICHISTORY CD_IO_BY_R_LG_SEC,CD_IO_BY_R_SM_SEC,CD_IO_BY_W_LG_SEC,CD_IO_BY_W_SM_SEC where collectionTime > '2016-08-29T01:00:00-06:00' and collectionTime < '2016-09-02T21:00:00-06:00'

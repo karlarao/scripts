@@ -1,0 +1,2 @@
+set dateformat local
+LIST METRICHISTORY CG_IO_RQ_LG_SEC,CG_IO_RQ_SM_SEC,CG_FD_IO_RQ_LG_SEC,CG_FD_IO_RQ_SM_SEC where collectionTime > '2017-02-01T01:00:00-06:00' and collectionTime < '2017-02-03T23:00:00-06:00'
