@@ -1,0 +1,481 @@
+<?xml version='1.0' encoding='utf-8' ?>
+
+<!-- build 9300.16.0907.1515                                -->
+<workbook source-build='9.3.7 (9300.16.0907.1515)' source-platform='win' version='9.3' xmlns:user='http://www.tableausoftware.com/xml/user'>
+  <preferences>
+    <preference name='ui.encoding.shelf.height' value='24' />
+    <preference name='ui.shelf.height' value='26' />
+  </preferences>
+  <datasources>
+    <datasource caption='awr_sgapga' inline='true' name='textscan.0xhktm10g9r61i11ct5ig1viuk5b' version='9.3'>
+      <connection class='textscan' directory='C:/Users/karl/Desktop/tmp/DLL' filename='awr_sgapga.txt' password='' server=''>
+        <relation name='awr_sgapga.txt' table='[awr_sgapga#txt]' type='table'>
+          <columns character-set='UTF-8' header='yes' locale='en_US' separator=','>
+            <column datatype='string' name='INSTNAME       ' ordinal='0' />
+            <column datatype='integer' name='DB_ID                           ' ordinal='1' />
+            <column datatype='string' name='HOSTNAME                      ' ordinal='2' />
+            <column datatype='integer' name='ID' ordinal='3' />
+            <column datatype='datetime' name='TM                                                                         ' ordinal='4' />
+            <column datatype='integer' name='INST' ordinal='5' />
+            <column datatype='real' name='DUR' ordinal='6' />
+            <column datatype='real' name='MEMGB' ordinal='7' />
+            <column datatype='real' name='SGAGB' ordinal='8' />
+            <column datatype='real' name='PGAGB' ordinal='9' />
+          </columns>
+        </relation>
+        <metadata-records>
+          <metadata-record class='column'>
+            <remote-name>INSTNAME       </remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[INSTNAME       ]</local-name>
+            <parent-name>[awr_sgapga.txt]</parent-name>
+            <remote-alias>INSTNAME       </remote-alias>
+            <ordinal>0</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <scale>1</scale>
+            <width>1073741823</width>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='LEN_RUS' />
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteCollation'>&quot;en_US&quot;</attribute>
+              <attribute datatype='string' name='DebugRemoteMetadata (compression)'>&quot;heap&quot;</attribute>
+              <attribute datatype='integer' name='DebugRemoteMetadata (size)'>4294967292</attribute>
+              <attribute datatype='integer' name='DebugRemoteMetadata (storagewidth)'>8</attribute>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;str&quot;</attribute>
+            </attributes>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>DB_ID                           </remote-name>
+            <remote-type>20</remote-type>
+            <local-name>[DB_ID                           ]</local-name>
+            <parent-name>[awr_sgapga.txt]</parent-name>
+            <remote-alias>DB_ID                           </remote-alias>
+            <ordinal>1</ordinal>
+            <local-type>integer</local-type>
+            <aggregation>Sum</aggregation>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='integer' name='DebugRemoteMetadata (size)'>8</attribute>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;sint64&quot;</attribute>
+            </attributes>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>HOSTNAME                      </remote-name>
+            <remote-type>129</remote-type>
+            <local-name>[HOSTNAME                      ]</local-name>
+            <parent-name>[awr_sgapga.txt]</parent-name>
+            <remote-alias>HOSTNAME                      </remote-alias>
+            <ordinal>2</ordinal>
+            <local-type>string</local-type>
+            <aggregation>Count</aggregation>
+            <scale>1</scale>
+            <width>1073741823</width>
+            <contains-null>true</contains-null>
+            <collation flag='0' name='LEN_RUS' />
+            <attributes>
+              <attribute datatype='string' name='DebugRemoteCollation'>&quot;en_US&quot;</attribute>
+              <attribute datatype='string' name='DebugRemoteMetadata (compression)'>&quot;heap&quot;</attribute>
+              <attribute datatype='integer' name='DebugRemoteMetadata (size)'>4294967292</attribute>
+              <attribute datatype='integer' name='DebugRemoteMetadata (storagewidth)'>8</attribute>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;str&quot;</attribute>
+            </attributes>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>ID</remote-name>
+            <remote-type>20</remote-type>
+            <local-name>[ID]</local-name>
+            <parent-name>[awr_sgapga.txt]</parent-name>
+            <remote-alias>ID</remote-alias>
+            <ordinal>3</ordinal>
+            <local-type>integer</local-type>
+            <aggregation>Sum</aggregation>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='integer' name='DebugRemoteMetadata (size)'>8</attribute>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;sint64&quot;</attribute>
+            </attributes>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>TM                                                                         </remote-name>
+            <remote-type>135</remote-type>
+            <local-name>[TM                                                                         ]</local-name>
+            <parent-name>[awr_sgapga.txt]</parent-name>
+            <remote-alias>TM                                                                         </remote-alias>
+            <ordinal>4</ordinal>
+            <local-type>datetime</local-type>
+            <aggregation>Year</aggregation>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='integer' name='DebugRemoteMetadata (size)'>8</attribute>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;datetime&quot;</attribute>
+            </attributes>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>INST</remote-name>
+            <remote-type>20</remote-type>
+            <local-name>[INST]</local-name>
+            <parent-name>[awr_sgapga.txt]</parent-name>
+            <remote-alias>INST</remote-alias>
+            <ordinal>5</ordinal>
+            <local-type>integer</local-type>
+            <aggregation>Sum</aggregation>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='integer' name='DebugRemoteMetadata (size)'>8</attribute>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;sint64&quot;</attribute>
+            </attributes>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>DUR</remote-name>
+            <remote-type>5</remote-type>
+            <local-name>[DUR]</local-name>
+            <parent-name>[awr_sgapga.txt]</parent-name>
+            <remote-alias>DUR</remote-alias>
+            <ordinal>6</ordinal>
+            <local-type>real</local-type>
+            <aggregation>Sum</aggregation>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='integer' name='DebugRemoteMetadata (size)'>8</attribute>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;double&quot;</attribute>
+            </attributes>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>MEMGB</remote-name>
+            <remote-type>5</remote-type>
+            <local-name>[MEMGB]</local-name>
+            <parent-name>[awr_sgapga.txt]</parent-name>
+            <remote-alias>MEMGB</remote-alias>
+            <ordinal>7</ordinal>
+            <local-type>real</local-type>
+            <aggregation>Sum</aggregation>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='integer' name='DebugRemoteMetadata (size)'>8</attribute>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;double&quot;</attribute>
+            </attributes>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>SGAGB</remote-name>
+            <remote-type>5</remote-type>
+            <local-name>[SGAGB]</local-name>
+            <parent-name>[awr_sgapga.txt]</parent-name>
+            <remote-alias>SGAGB</remote-alias>
+            <ordinal>8</ordinal>
+            <local-type>real</local-type>
+            <aggregation>Sum</aggregation>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='integer' name='DebugRemoteMetadata (size)'>8</attribute>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;double&quot;</attribute>
+            </attributes>
+          </metadata-record>
+          <metadata-record class='column'>
+            <remote-name>PGAGB</remote-name>
+            <remote-type>5</remote-type>
+            <local-name>[PGAGB]</local-name>
+            <parent-name>[awr_sgapga.txt]</parent-name>
+            <remote-alias>PGAGB</remote-alias>
+            <ordinal>9</ordinal>
+            <local-type>real</local-type>
+            <aggregation>Sum</aggregation>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='integer' name='DebugRemoteMetadata (size)'>8</attribute>
+              <attribute datatype='string' name='DebugRemoteType'>&quot;double&quot;</attribute>
+            </attributes>
+          </metadata-record>
+          <metadata-record class='capability'>
+            <remote-name />
+            <remote-type>0</remote-type>
+            <parent-name>[awr_sgapga.txt]</parent-name>
+            <remote-alias />
+            <aggregation>Count</aggregation>
+            <contains-null>true</contains-null>
+            <attributes>
+              <attribute datatype='string' name='character-set'>&quot;UTF-8&quot;</attribute>
+              <attribute datatype='string' name='collation'>&quot;en_US&quot;</attribute>
+              <attribute datatype='string' name='field-delimiter'>&quot;,&quot;</attribute>
+              <attribute datatype='string' name='header-row'>&quot;true&quot;</attribute>
+              <attribute datatype='string' name='locale'>&quot;en_US&quot;</attribute>
+              <attribute datatype='string' name='single-char'>&quot;&quot;</attribute>
+            </attributes>
+          </metadata-record>
+        </metadata-records>
+      </connection>
+      <aliases enabled='yes' />
+      <column caption='Db Id' datatype='integer' name='[DB_ID                           ]' role='dimension' type='ordinal' />
+      <column caption='Hostname' datatype='string' name='[HOSTNAME                      ]' role='dimension' type='nominal' />
+      <column datatype='integer' name='[ID]' role='dimension' type='ordinal' />
+      <column caption='Instname' datatype='string' name='[INSTNAME       ]' role='dimension' type='nominal' />
+      <column aggregation='Sum' caption='Inst' datatype='integer' name='[INST]' role='dimension' type='ordinal' />
+      <column caption='Memgb' datatype='real' name='[MEMGB]' role='measure' type='quantitative' />
+      <column datatype='integer' name='[Number of Records]' role='measure' type='quantitative' user:auto-column='numrec'>
+        <calculation class='tableau' formula='1' />
+      </column>
+      <column caption='Pgagb' datatype='real' name='[PGAGB]' role='measure' type='quantitative' />
+      <column caption='Sgagb' datatype='real' name='[SGAGB]' role='measure' type='quantitative' />
+      <column caption='Tm' datatype='datetime' name='[TM                                                                         ]' role='dimension' type='ordinal' />
+      <column-instance column='[PGAGB]' derivation='Max' name='[max:PGAGB:qk]' pivot='key' type='quantitative' />
+      <column-instance column='[SGAGB]' derivation='Max' name='[max:SGAGB:qk]' pivot='key' type='quantitative' />
+      <column-instance column='[INSTNAME       ]' derivation='None' name='[none:INSTNAME       :nk]' pivot='key' type='nominal' />
+      <column-instance column='[PGAGB]' derivation='Sum' name='[sum:PGAGB:qk]' pivot='key' type='quantitative' />
+      <column-instance column='[SGAGB]' derivation='Sum' name='[sum:SGAGB:qk]' pivot='key' type='quantitative' />
+      <layout dim-ordering='alphabetic' dim-percentage='0.48542' measure-ordering='alphabetic' measure-percentage='0.51458' show-structure='true' />
+      <style>
+        <style-rule element='mark'>
+          <encoding attr='color' field='[none:INSTNAME       :nk]' type='palette'>
+            <map to='#1f77b4'>
+              <bucket>&quot;olmcrp07&quot;</bucket>
+            </map>
+            <map to='#2ca02c'>
+              <bucket>&quot;INSTNAME&quot;</bucket>
+            </map>
+            <map to='#ff7f0e'>
+              <bucket>&quot;olmtst11&quot;</bucket>
+            </map>
+          </encoding>
+          <encoding attr='color' field='[:Measure Names]' type='palette'>
+            <map to='#1f77b4'>
+              <bucket>&quot;[textscan.0xhktm10g9r61i11ct5ig1viuk5b].[usr:Calculation_85568404528771075:qk]&quot;</bucket>
+            </map>
+            <map to='#2ca02c'>
+              <bucket>&quot;[textscan.0xhktm10g9r61i11ct5ig1viuk5b].[max:PGAGB:qk]&quot;</bucket>
+            </map>
+            <map to='#2ca02c'>
+              <bucket>&quot;[textscan.0xhktm10g9r61i11ct5ig1viuk5b].[sum:PGAGB:qk]&quot;</bucket>
+            </map>
+            <map to='#d62728'>
+              <bucket>&quot;[textscan.0xhktm10g9r61i11ct5ig1viuk5b].[max:SGAGB:qk]&quot;</bucket>
+            </map>
+            <map to='#d62728'>
+              <bucket>&quot;[textscan.0xhktm10g9r61i11ct5ig1viuk5b].[sum:SGAGB:qk]&quot;</bucket>
+            </map>
+            <map to='#ff7f0e'>
+              <bucket>&quot;[textscan.0xhktm10g9r61i11ct5ig1viuk5b].[usr:Calculation_85568404527931393:qk]&quot;</bucket>
+            </map>
+          </encoding>
+        </style-rule>
+      </style>
+      <semantic-values>
+        <semantic-value key='[Country].[Name]' value='&quot;United States&quot;' />
+      </semantic-values>
+    </datasource>
+  </datasources>
+  <worksheets>
+    <worksheet name='sgapga'>
+      <table>
+        <view>
+          <datasources>
+            <datasource caption='awr_sgapga' name='textscan.0xhktm10g9r61i11ct5ig1viuk5b' />
+          </datasources>
+          <datasource-dependencies datasource='textscan.0xhktm10g9r61i11ct5ig1viuk5b'>
+            <column caption='Hostname' datatype='string' name='[HOSTNAME                      ]' role='dimension' type='nominal' />
+            <column caption='Instname' datatype='string' name='[INSTNAME       ]' role='dimension' type='nominal' />
+            <column aggregation='Sum' caption='Inst' datatype='integer' name='[INST]' role='dimension' type='ordinal' />
+            <column caption='Pgagb' datatype='real' name='[PGAGB]' role='measure' type='quantitative' />
+            <column caption='Sgagb' datatype='real' name='[SGAGB]' role='measure' type='quantitative' />
+            <column caption='Tm' datatype='datetime' name='[TM                                                                         ]' role='dimension' type='ordinal' />
+            <column-instance column='[TM                                                                         ]' derivation='Day' name='[dy:TM                                                                         :ok]' pivot='key' type='ordinal' />
+            <column-instance column='[TM                                                                         ]' derivation='Hour' name='[hr:TM                                                                         :ok]' pivot='key' type='ordinal' />
+            <column-instance column='[PGAGB]' derivation='Max' name='[max:PGAGB:qk]' pivot='key' type='quantitative' />
+            <column-instance column='[SGAGB]' derivation='Max' name='[max:SGAGB:qk]' pivot='key' type='quantitative' />
+            <column-instance column='[TM                                                                         ]' derivation='Month' name='[mn:TM                                                                         :ok]' pivot='key' type='ordinal' />
+            <column-instance column='[HOSTNAME                      ]' derivation='None' name='[none:HOSTNAME                      :nk]' pivot='key' type='nominal' />
+            <column-instance column='[INST]' derivation='None' name='[none:INST:ok]' pivot='key' type='ordinal' />
+            <column-instance column='[INSTNAME       ]' derivation='None' name='[none:INSTNAME       :nk]' pivot='key' type='nominal' />
+            <column-instance column='[TM                                                                         ]' derivation='Quarter' name='[qr:TM                                                                         :ok]' pivot='key' type='ordinal' />
+            <column-instance column='[TM                                                                         ]' derivation='Year' name='[yr:TM                                                                         :ok]' pivot='key' type='ordinal' />
+          </datasource-dependencies>
+          <filter class='categorical' column='[textscan.0xhktm10g9r61i11ct5ig1viuk5b].[:Measure Names]'>
+            <groupfilter function='union' user:op='manual'>
+              <groupfilter function='member' level='[:Measure Names]' member='&quot;[textscan.0xhktm10g9r61i11ct5ig1viuk5b].[max:PGAGB:qk]&quot;' />
+              <groupfilter function='member' level='[:Measure Names]' member='&quot;[textscan.0xhktm10g9r61i11ct5ig1viuk5b].[max:SGAGB:qk]&quot;' />
+            </groupfilter>
+          </filter>
+          <filter class='categorical' column='[textscan.0xhktm10g9r61i11ct5ig1viuk5b].[none:INSTNAME       :nk]'>
+            <groupfilter function='except' user:ui-domain='relevant' user:ui-enumeration='exclusive' user:ui-marker='enumerate'>
+              <groupfilter function='level-members' level='[none:INSTNAME       :nk]' />
+              <groupfilter function='member' level='[none:INSTNAME       :nk]' member='&quot;INSTNAME&quot;' />
+            </groupfilter>
+          </filter>
+          <slices>
+            <column>[textscan.0xhktm10g9r61i11ct5ig1viuk5b].[none:INSTNAME       :nk]</column>
+            <column>[textscan.0xhktm10g9r61i11ct5ig1viuk5b].[:Measure Names]</column>
+          </slices>
+          <aggregation value='true' />
+        </view>
+        <style />
+        <panes>
+          <pane>
+            <view>
+              <breakdown value='auto' />
+            </view>
+            <mark class='Bar' />
+            <encodings>
+              <color column='[textscan.0xhktm10g9r61i11ct5ig1viuk5b].[:Measure Names]' />
+            </encodings>
+            <style>
+              <style-rule element='mark'>
+                <format attr='mark-labels-show' value='false' />
+              </style-rule>
+            </style>
+          </pane>
+        </panes>
+        <rows>(([textscan.0xhktm10g9r61i11ct5ig1viuk5b].[none:INSTNAME       :nk] / ([textscan.0xhktm10g9r61i11ct5ig1viuk5b].[none:HOSTNAME                      :nk] / [textscan.0xhktm10g9r61i11ct5ig1viuk5b].[none:INST:ok])) * [textscan.0xhktm10g9r61i11ct5ig1viuk5b].[Multiple Values])</rows>
+        <cols>([textscan.0xhktm10g9r61i11ct5ig1viuk5b].[yr:TM                                                                         :ok] / ([textscan.0xhktm10g9r61i11ct5ig1viuk5b].[qr:TM                                                                         :ok] / ([textscan.0xhktm10g9r61i11ct5ig1viuk5b].[mn:TM                                                                         :ok] / ([textscan.0xhktm10g9r61i11ct5ig1viuk5b].[dy:TM                                                                         :ok] / [textscan.0xhktm10g9r61i11ct5ig1viuk5b].[hr:TM                                                                         :ok]))))</cols>
+      </table>
+    </worksheet>
+  </worksheets>
+  <windows source-height='28'>
+    <window class='worksheet' maximized='true' name='sgapga'>
+      <cards>
+        <edge name='left'>
+          <strip size='160'>
+            <card type='pages' />
+            <card type='filters' />
+            <card type='marks' />
+            <card type='measures' />
+            <card pane-specification-id='0' param='[textscan.0xhktm10g9r61i11ct5ig1viuk5b].[:Measure Names]' type='color' />
+          </strip>
+        </edge>
+        <edge name='top'>
+          <strip size='2147483647'>
+            <card type='columns' />
+          </strip>
+          <strip size='2147483647'>
+            <card type='rows' />
+          </strip>
+        </edge>
+      </cards>
+      <viewpoint>
+        <zoom type='entire-view' />
+        <highlight>
+          <color-one-way>
+            <field>[textscan.0xhktm10g9r61i11ct5ig1viuk5b].[:Measure Names]</field>
+            <field>[textscan.0xhktm10g9r61i11ct5ig1viuk5b].[none:HOSTNAME                      :nk]</field>
+            <field>[textscan.0xhktm10g9r61i11ct5ig1viuk5b].[none:INST:ok]</field>
+            <field>[textscan.0xhktm10g9r61i11ct5ig1viuk5b].[none:INSTNAME       :nk]</field>
+            <field>[textscan.0xhktm10g9r61i11ct5ig1viuk5b].[yr:TM                                                                         :ok]</field>
+          </color-one-way>
+        </highlight>
+      </viewpoint>
+    </window>
+  </windows>
+  <thumbnails>
+    <thumbnail height='192' name='sgapga' width='192'>
+      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
+      QM0AAAAASUVORK5CYII=
+    </thumbnail>
+  </thumbnails>
+</workbook>
