@@ -18,7 +18,7 @@
 - [workload characterization, sizing, and capacity planning](https://github.com/karlarao/scripts/tree/master/workload_sizing_and_capacity) 
 	- [HOWTO - consolidation and resource management](https://github.com/karlarao/scripts/blob/master/workload_sizing_and_capacity/sizing_worksheet/Consolidation%20and%20Resource%20Management.pdf) ([sizing_worksheet](https://github.com/karlarao/scripts/tree/master/workload_sizing_and_capacity/sizing_worksheet))
 	- [HOWTO – extract database workload and capacity info](https://github.com/karlarao/scripts/blob/master/workload_sizing_and_capacity/HOWTO%20%E2%80%93%20extract%20database%20workload%20and%20capacity%20info.docx)
-	- [Tableau workbooks](https://github.com/karlarao/oraexploratory/tree/master/explore/tableau) ([oraexploratory](https://github.com/karlarao/oraexploratory))
+	- [Tableau workbooks](https://github.com/karlarao/scripts/tree/master/workload_sizing_and_capacity/oraexploratory/explore/tableau) - ([oraexploratory](https://github.com/karlarao/scripts/tree/master/workload_sizing_and_capacity/oraexploratory))
 - [exadata](https://github.com/karlarao/scripts/tree/master/exadata)
 	- [disk topology](https://github.com/karlarao/scripts/tree/master/exadata/exadata_disk_topology)
 	- [HOWTO - extract cell metrics by Flash vs Hard Disk](https://github.com/karlarao/scripts/blob/master/exadata/cellmetricstoolkit/HOWTO%20%E2%80%93%20extract%20cell%20metrics%20by%20Flash%20vs%20Hard%20Disk_v2.1.docx) ([cellmetricstoolkit](https://github.com/karlarao/scripts/tree/master/exadata/cellmetricstoolkit))
