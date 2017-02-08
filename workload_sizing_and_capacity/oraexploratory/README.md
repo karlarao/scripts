@@ -1,3 +1,5 @@
+THIS IS A BUNDLED VERSION OF [https://github.com/karlarao/oraexploratory](https://github.com/karlarao/oraexploratory)
+
 ##### Oracle Tableau Workbooks
 
 #### Session Workload
