@@ -1,0 +1,1 @@
+while : ; do sh run_gash.sh; sleep 600; rm nohup.out; done
