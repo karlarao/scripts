@@ -1,3 +1,4 @@
+THIS IS A BUNDLED VERSION OF [https://github.com/karlarao/sizing_worksheet](https://github.com/karlarao/sizing_worksheet)
 
 Read on the doc [Consolidation and Resource Management.pdf](https://github.com/karlarao/provisioning_worksheet/blob/master/Consolidation%20and%20Resource%20Management.pdf) for more details and HOWTO.
 
