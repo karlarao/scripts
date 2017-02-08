@@ -1,0 +1,44 @@
+#!/bin/bash
+
+ps -ef | grep pmon | grep -v grep | grep -v perl | grep -v ASM | grep -v DBFS |\
+while read PMON; do
+   INST=`echo $PMON | awk {' print $8 '} | cut -f3 -d_`
+  echo $INST
+
+  MAIN_ENV=~/.env/main.env
+  if [ -r $MAIN_ENV ]; then
+     . $MAIN_ENV $INST
+  else
+     echo 'Could not open $MAIN_ENV for read.'
+  fi
+
+  sqlplus -s /nolog <<-EOF
+  connect / as sysdba
+  set head off
+  set trimspool on
+  show parameter memory
+  show parameter sga
+  show parameter pga
+
+col value format 9999999999
+select name, value/1024/1024 value
+from v\$parameter
+where name in ('shared_pool_size', 'large_pool_size', 'java_pool_size', 'db_cache_size', 'log_buffer');
+
+  show parameter cpu_count
+  show parameter resource_manager_plan
+
+  set lines 300
+select b.name, a.DBID,
+   ((TRUNC(SYSDATE) + a.SNAP_INTERVAL - TRUNC(SYSDATE)) * 86400)/60 AS SNAP_INTERVAL_MINS,
+   ((TRUNC(SYSDATE) + a.RETENTION - TRUNC(SYSDATE)) * 86400)/60 AS RETENTION_MINS,
+   ((TRUNC(SYSDATE) + a.RETENTION - TRUNC(SYSDATE)) * 86400)/60/60/24 AS RETENTION_DAYS,
+   TOPNSQL
+from dba_hist_wr_control a, v\$database b
+where a.dbid = b.dbid;
+
+select '###############################################################################' from dual;
+
+EOF
+
+done

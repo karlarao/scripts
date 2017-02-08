@@ -1,0 +1,27 @@
+hcmprd =
+  (DESCRIPTION =
+    (ADDRESS = (PROTOCOL = TCP)(HOST = pd01-scan)(PORT = 1521))
+    (CONNECT_DATA =
+      (SERVER = DEDICATED)
+      (SERVICE_NAME = hcmprd.example.com)
+    )
+  )
+
+dw =
+  (DESCRIPTION =
+    (ADDRESS = (PROTOCOL = TCP)(HOST = desktopserver.local)(PORT = 1521))
+    (CONNECT_DATA =
+      (SERVER = DEDICATED)
+      (SERVICE_NAME = dw.local)
+    )
+  )
+
+emrep =
+  (DESCRIPTION =
+    (ADDRESS = (PROTOCOL = TCP)(HOST = desktopserver.local)(PORT = 1521))
+    (CONNECT_DATA =
+      (SERVER = DEDICATED)
+      (SERVICE_NAME = emrep.local)
+    )
+  )
+

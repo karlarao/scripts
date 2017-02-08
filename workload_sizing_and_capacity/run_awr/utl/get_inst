@@ -1,0 +1,1 @@
+ps -ef | grep pmon | grep -v grep | grep -v perl | grep -v ASM | awk {' print $8 '} | cut -f3 -d_

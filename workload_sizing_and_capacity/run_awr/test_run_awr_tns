@@ -1,0 +1,35 @@
+#!/bin/bash
+# run_awr-quickextract
+
+# edit environment here 
+export TNS_ADMIN=/home/oracle/dba/run_awr-quickextract
+export ORACLE_HOME=/u01/app/oracle/product/11.2.0/dbhome_1
+
+
+# main script 
+export DATE=$(date +%Y%m%d%H%M)
+cat dblist | grep -v "#" | cut -f1,2,3 -d, |\
+while read DATABASE; do
+   TNS=`echo $DATABASE | cut -f1 -d,`
+   echo "tns entry: $TNS"
+   USERNAME=`echo $DATABASE | cut -f2 -d,`
+   PASS=`echo $DATABASE | cut -f3 -d,`
+
+$ORACLE_HOME/bin/sqlplus -s /nolog <<!
+connect $USERNAME/$PASS@$TNS
+
+spool run_awr-quickextract_$TNS-$DATE.log  
+
+select * from dual;
+
+spool off
+!
+
+echo '-----'
+echo
+echo
+done
+
+echo "!!!!!!!!!!##### Fix TNS or dblist entry below: #####!!!!!!!!!!"
+find . | grep run_awr-quickextract | xargs grep "connected"
+rm run_awr-quickextract*.log

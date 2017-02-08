@@ -1,0 +1,37 @@
+
+find . -name '*awr_topevents*.csv' | while read file; do
+cat "$file" >> awr_topevents.txt
+done
+find . -name '*awr_sysstat*.csv' | while read file; do
+cat "$file" >> awr_sysstat.txt
+done
+find . -name '*awr_sgapga*.csv' | while read file; do
+cat "$file" >> awr_sgapga.txt
+done
+find . -name '*awr_cpuwl*.csv' | while read file; do
+cat "$file" >> awr_cpuwl.txt
+done
+find . -name '*awr_iowl*.csv' | while read file; do
+cat "$file" >> awr_iowl.txt
+done
+find . -name '*awr_storagesize_summary*.csv' | while read file; do
+cat "$file" >> awr_storagesize_summary.txt
+done
+find . -name '*awr_storagesize_detail*.csv' | while read file; do
+cat "$file" >> awr_storagesize_detail.txt
+done
+find . -name '*awr_storagesize_rman*.csv' | while read file; do
+cat "$file" >> awr_storagesize_rman.txt
+done
+find . -name '*awr_services*.csv' | while read file; do
+cat "$file" >> awr_services.txt
+done
+find . -name '*awr_topsqlx*.csv' | while read file; do
+cat "$file" >> awr_topsqlx.txt
+done
+find . -name '*awr_topsegments*.csv' | while read file; do
+cat "$file" >> awr_topsegments.txt
+done
+find . -name '*awr_iostat_filetype*.csv' | while read file; do
+cat "$file" >> awr_iostat_filetype.txt
+done

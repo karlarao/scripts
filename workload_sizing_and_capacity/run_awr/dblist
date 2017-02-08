@@ -1,0 +1,5 @@
+# dblist format:
+#    tns,username,password
+# 
+dw,karlarao,karlarao
+emrep,system,oracle
