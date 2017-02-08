@@ -1,0 +1,2 @@
+
+[Sizing_SGA](https://github.com/karlarao/sizing_worksheet/tree/master/examples/Sizing_SGA) - [http://www.freelists.org/post/oracle-l/Sizing-SGA,4](http://www.freelists.org/post/oracle-l/Sizing-SGA,4) 
