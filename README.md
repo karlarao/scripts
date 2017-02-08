@@ -25,3 +25,4 @@
 	- [HOWTO - extract cell metrics by Flash vs Hard Disk](https://github.com/karlarao/scripts/blob/master/exadata/cellmetricstoolkit/HOWTO%20%E2%80%93%20extract%20cell%20metrics%20by%20Flash%20vs%20Hard%20Disk_v2.1.docx) ([cellmetricstoolkit](https://github.com/karlarao/scripts/tree/master/exadata/cellmetricstoolkit))
 	- [HOWTO - HCC test case](https://github.com/karlarao/scripts/blob/master/exadata/hcc_testcase/HCC%20test%20case.docx) ([hcc_testcase](https://github.com/karlarao/scripts/tree/master/exadata/hcc_testcase))
 - [resource_management](https://github.com/karlarao/scripts/tree/master/resource_management)	
+	- [DBRM IORM Testcase Matrix](https://github.com/karlarao/scripts/tree/master/resource_management/rm_matrix) 
