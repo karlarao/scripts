@@ -1,3 +1,5 @@
+THIS IS A BUNDLED VERSION OF [https://github.com/karlarao/pull_dump_and_explore_ash](https://github.com/karlarao/pull_dump_and_explore_ash)
+
 # pull_dump_and_explore_ash
 pull (from any database), dump (to your local machine), and explore ash
 
