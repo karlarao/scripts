@@ -1,4 +1,11 @@
 
+## To get/use the repo
+
+- Download the zip file [https://github.com/karlarao/scripts/archive/master.zip](https://github.com/karlarao/scripts/archive/master.zip)
+- Copy/Unzip on your machine/server 
+- cd on each directory, read the README/docs, and execute the scripts/tools
+
+
 ## Categories  
 
 - [backup and recovery](https://github.com/karlarao/scripts/tree/master/backup_and_recovery)
