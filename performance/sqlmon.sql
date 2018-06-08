@@ -1,4 +1,7 @@
-ttitle left '*** GV$SQL_MONITOR ***' skip 1
+
+PRO ##############################
+PRO '*** GV$SQL_MONITOR ***' 
+PRO ##############################
 
 -- with child address join
 set pagesize 999
@@ -20,19 +23,19 @@ select
         a.status,
         decode(b.IO_CELL_OFFLOAD_ELIGIBLE_BYTES,0,'N','Y') Offload,
         decode(b.IO_CELL_OFFLOAD_ELIGIBLE_BYTES,0,'Y','N') InMemPX,
+        a.INST_ID inst,     
+        a.SID,           
         b.EXECUTIONS exec,
         round(a.ELAPSED_TIME/1000000,2) ela_tm,
         round(a.CPU_TIME/1000000,2) cpu_tm,
         round(a.USER_IO_WAIT_TIME/1000000,2) io_tm,
         round((a.PHYSICAL_READ_BYTES/1024/1024)/NULLIF(nvl((a.ELAPSED_TIME/1000000),0),0),2) RMBs,
         round((a.PHYSICAL_WRITE_BYTES/1024/1024)/NULLIF(nvl((a.ELAPSED_TIME/1000000),0),0),2) WMBs,
-        a.SID,
         substr (a.MODULE, 1,16) module,
-        -- a.RM_CONSUMER_GROUP rm_group,  -- new in 11204
+ a.RM_CONSUMER_GROUP rm_group,  -- new in 11204
         a.SQL_ID,
         a.SQL_PLAN_HASH_VALUE PHV,
         a.sql_exec_id,
-        a.INST_ID inst,
         a.USERNAME,
         CASE WHEN a.PX_SERVERS_ALLOCATED IS NULL THEN NULL WHEN a.PX_SERVERS_ALLOCATED = 0 THEN 1 ELSE a.PX_SERVERS_ALLOCATED END PX1,
         CASE WHEN a.PX_SERVER_SET IS NULL THEN NULL WHEN a.PX_SERVER_SET = 0 THEN 1 ELSE a.PX_SERVER_SET END PX2,
@@ -52,10 +55,15 @@ and a.status in ('QUEUED','EXECUTING')
 order by a.status, a.SQL_EXEC_START, a.SQL_EXEC_ID, a.PX_SERVERS_ALLOCATED, a.PX_SERVER_SET, a.PX_SERVER# asc
 /
 
-ttitle left '*** GV$SESSION ***' skip 1
+PRO ##############################
+PRO '*** GV$SESSION ***' 
+PRO ##############################
 
 set pagesize 999
-set lines 180
+set lines 500
+col p1text format a20
+col p2text format a20
+col p3text format a20
 col inst for 9999
 col username format a13
 col prog format a10 trunc
@@ -67,14 +75,17 @@ break on sql_text
 col sql_text format a30
 col event format a20
 col hours format 99999
+col machine format a30
+col osuser format a10
 select a.inst_id inst, sid, username, substr(program,1,19) prog, b.sql_id, child_number child, plan_hash_value, executions execs,
 (elapsed_time/decode(nvl(executions,0),0,1,executions))/1000000 avg_etime,
 substr(event,1,20) event,
+p1text,p1,p2text,p2,p3text,p3 ,
 substr(sql_text,1,30) sql_text,
 LAST_CALL_ET/60/60 hours,
 decode(b.IO_CELL_OFFLOAD_ELIGIBLE_BYTES,0,'No','Yes') Offload,
 decode(b.IO_CELL_OFFLOAD_ELIGIBLE_BYTES,0,0,100*(b.IO_CELL_OFFLOAD_ELIGIBLE_BYTES-b.IO_INTERCONNECT_BYTES)
-/decode(b.IO_CELL_OFFLOAD_ELIGIBLE_BYTES,0,1,b.IO_CELL_OFFLOAD_ELIGIBLE_BYTES)) "IO_SAVED_%"
+/decode(b.IO_CELL_OFFLOAD_ELIGIBLE_BYTES,0,1,b.IO_CELL_OFFLOAD_ELIGIBLE_BYTES)) "IO_SAVED_%", a.machine "machine", a.osuser osuser
 from gv$session a, gv$sql b
 where status = 'ACTIVE'
 and username is not null
@@ -86,7 +97,9 @@ and sql_text not like 'declare%' -- skip PL/SQL blocks
 order by hours desc, sql_id, child
 /
 
-ttitle left '*** GV$SESSION sort by INST_ID ***' skip 1
+PRO ##############################
+PRO '*** GV$SESSION sort by INST_ID ***' 
+PRO ##############################
 
 set lines 32767
 col terminal format a4
@@ -107,12 +120,14 @@ col sql_text format a30
 col action format a8
 col event format a40
 col hours format 99999
+col machine format a30
+col osuser format a10
 select /* usercheck */ s.INST_ID, s.sid sid, lpad(p.spid,7) unix_pid, s.username oracle_login, substr(s.program,1,20) program,
         s.sql_id,               -- remove in 817, 9i
         sa.plan_hash_value,     -- remove in 817, 9i
         substr(s.event,1,40) event,
         substr(sa.sql_text,1,30) sql_text,
-        s.LAST_CALL_ET/60/60 hours
+        s.LAST_CALL_ET/60/60 hours, s.machine "machine" , s.osuser osuser
 from gv$process p, gv$session s, gv$sqlarea sa
 where p.addr=s.paddr
 and   s.username is not null
@@ -131,4 +146,24 @@ and   sa.sql_text NOT LIKE '%usercheck%'
 -- and s.module like 'PSNVS%'
 -- and s.program like 'PSNVS%'
 order by inst_id, sql_id
+--/
+
+
+PRO ##############################
+PRO longops
+PRO ##############################
+
+set lines 500
+col opname format a35
+col target format a10
+col units format a10
+select * from (
+      select
+      inst_id, sid, serial#, sql_id,
+      opname, target, sofar, totalwork, round(sofar/totalwork, 4)*100 pct, units, round(elapsed_seconds/60,2) elap_min, round(time_remaining/60,2) remaining_min
+      , sql_plan_hash_value, sql_plan_operation, sql_plan_options, sql_plan_line_id,  TO_CHAR(sql_exec_start, 'YYYY-MM-DD HH24:MI:SS') sql_exec_start
+      --,message
+      from gv$session_longops
+      WHERE sofar < totalwork
+      order by start_time desc)
 /
