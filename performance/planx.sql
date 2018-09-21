@@ -115,7 +115,7 @@ COL rows_processed FOR A20;
 COL buffer_gets FOR A20;
 COL disk_reads FOR A20;
 COL direct_writes FOR A20;
-COL elsapsed_secs FOR A18;
+COL elapsed_secs FOR A18;
 COL cpu_secs FOR A18;
 COL user_io_wait_secs FOR A18;
 COL cluster_wait_secs FOR A18;
@@ -135,7 +135,7 @@ SELECT inst_id,
        LPAD(TO_CHAR(buffer_gets, '999,999,999,999,990'), 20) buffer_gets,
        LPAD(TO_CHAR(disk_reads, '999,999,999,999,990'), 20) disk_reads, 
        LPAD(TO_CHAR(direct_writes, '999,999,999,999,990'), 20) direct_writes,
-       LPAD(TO_CHAR(ROUND(elapsed_time/1e6, 3), '999,999,990.000'), 18) elsapsed_secs,
+       LPAD(TO_CHAR(ROUND(elapsed_time/1e6, 3), '999,999,990.000'), 18) elapsed_secs,
        LPAD(TO_CHAR(ROUND(cpu_time/1e6, 3), '999,999,990.000'), 18) cpu_secs,
        LPAD(TO_CHAR(ROUND(user_io_wait_time/1e6, 3), '999,999,990.000'), 18) user_io_wait_secs,
        LPAD(TO_CHAR(ROUND(cluster_wait_time/1e6, 3), '999,999,990.000'), 18) cluster_wait_secs,
@@ -163,7 +163,7 @@ SELECT inst_id, plan_hash_value,
        LPAD(TO_CHAR(buffer_gets, '999,999,999,999,990'), 20) buffer_gets,
        LPAD(TO_CHAR(disk_reads, '999,999,999,999,990'), 20) disk_reads, 
        LPAD(TO_CHAR(direct_writes, '999,999,999,999,990'), 20) direct_writes,
-       LPAD(TO_CHAR(ROUND(elapsed_time/1e6, 3), '999,999,990.000'), 18) elsapsed_secs,
+       LPAD(TO_CHAR(ROUND(elapsed_time/1e6, 3), '999,999,990.000'), 18) elapsed_secs,
        LPAD(TO_CHAR(ROUND(cpu_time/1e6, 3), '999,999,990.000'), 18) cpu_secs,
        LPAD(TO_CHAR(ROUND(user_io_wait_time/1e6, 3), '999,999,990.000'), 18) user_io_wait_secs,
        LPAD(TO_CHAR(ROUND(cluster_wait_time/1e6, 3), '999,999,990.000'), 18) cluster_wait_secs,
@@ -192,7 +192,7 @@ SELECT inst_id, child_number, plan_hash_value, &&is_10g.is_shareable,
        LPAD(TO_CHAR(buffer_gets, '999,999,999,999,990'), 20) buffer_gets,
        LPAD(TO_CHAR(disk_reads, '999,999,999,999,990'), 20) disk_reads, 
        LPAD(TO_CHAR(direct_writes, '999,999,999,999,990'), 20) direct_writes,
-       LPAD(TO_CHAR(ROUND(elapsed_time/1e6, 3), '999,999,990.000'), 18) elsapsed_secs,
+       LPAD(TO_CHAR(ROUND(elapsed_time/1e6, 3), '999,999,990.000'), 18) elapsed_secs,
        LPAD(TO_CHAR(ROUND(cpu_time/1e6, 3), '999,999,990.000'), 18) cpu_secs,
        LPAD(TO_CHAR(ROUND(user_io_wait_time/1e6, 3), '999,999,990.000'), 18) user_io_wait_secs,
        LPAD(TO_CHAR(ROUND(cluster_wait_time/1e6, 3), '999,999,990.000'), 18) cluster_wait_secs,
@@ -244,7 +244,7 @@ SELECT s.snap_id,
        LPAD(TO_CHAR(h.buffer_gets_delta, '999,999,999,999,990'), 20) buffer_gets, 
        LPAD(TO_CHAR(h.disk_reads_delta, '999,999,999,999,990'), 20) disk_reads, 
        LPAD(TO_CHAR(h.direct_writes_delta, '999,999,999,999,990'), 20) direct_writes,
-       LPAD(TO_CHAR(ROUND(h.elapsed_time_delta/1e6, 3), '999,999,990.000'), 18) elsapsed_secs,
+       LPAD(TO_CHAR(ROUND(h.elapsed_time_delta/1e6, 3), '999,999,990.000'), 18) elapsed_secs,
        LPAD(TO_CHAR(ROUND(h.cpu_time_delta/1e6, 3), '999,999,990.000'), 18) cpu_secs,
        LPAD(TO_CHAR(ROUND(h.iowait_delta/1e6, 3), '999,999,990.000'), 18) user_io_wait_secs,
        LPAD(TO_CHAR(ROUND(h.clwait_delta/1e6, 3), '999,999,990.000'), 18) cluster_wait_secs,
@@ -282,7 +282,7 @@ SELECT s.snap_id,
        LPAD(TO_CHAR(h.buffer_gets_total, '999,999,999,999,990'), 20) buffer_gets, 
        LPAD(TO_CHAR(h.disk_reads_total, '999,999,999,999,990'), 20) disk_reads, 
        LPAD(TO_CHAR(h.direct_writes_total, '999,999,999,999,990'), 20) direct_writes,
-       LPAD(TO_CHAR(ROUND(h.elapsed_time_total/1e6, 3), '999,999,990.000'), 18) elsapsed_secs,
+       LPAD(TO_CHAR(ROUND(h.elapsed_time_total/1e6, 3), '999,999,990.000'), 18) elapsed_secs,
        LPAD(TO_CHAR(ROUND(h.cpu_time_total/1e6, 3), '999,999,990.000'), 18) cpu_secs,
        LPAD(TO_CHAR(ROUND(h.iowait_total/1e6, 3), '999,999,990.000'), 18) user_io_wait_secs,
        LPAD(TO_CHAR(ROUND(h.clwait_total/1e6, 3), '999,999,990.000'), 18) cluster_wait_secs,
@@ -349,6 +349,62 @@ SELECT /*+ ORDERED USE_NL(t) */
   FROM v, TABLE(DBMS_XPLAN.DISPLAY_AWR(v.sql_id, v.plan_hash_value, v.dbid, 'ADVANCED')) t
 /  
 PRO
+PRO GV$ACTIVE_SESSION_HISTORY - ash_elap by exec (recent 20)
+PRO ~~~~~~~~~~~~~~~~~~~~~~~~~
+set lines 300
+col sql_exec_start format a30
+col run_time_timestamp format a30
+select sql_id, 
+	  CAST(sql_exec_start AS TIMESTAMP) sql_exec_start,
+      run_time run_time_timestamp, 
+ (EXTRACT(HOUR FROM run_time) * 3600
+                    + EXTRACT(MINUTE FROM run_time) * 60 
+                    + EXTRACT(SECOND FROM run_time)) run_time_sec
+from  (
+select 
+       sql_id,
+       max(sql_exec_start) sql_exec_start,
+       max(sample_time - sql_exec_start) run_time 
+from 
+       gv$active_session_history  
+where sql_id = '&&sql_id.'
+and sql_exec_start is not null 
+group by sql_id,SQL_EXEC_ID
+order by sql_exec_start desc 
+)
+where rownum < 21
+order by sql_exec_start asc
+/
+PRO
+PRO GV$ACTIVE_SESSION_HISTORY - ash_elap exec avg min max 
+PRO ~~~~~~~~~~~~~~~~~~~~~~~~~
+select sql_id,  
+		count(*),
+        round(avg(EXTRACT(HOUR FROM run_time) * 3600
+                    + EXTRACT(MINUTE FROM run_time) * 60 
+                    + EXTRACT(SECOND FROM run_time)),2) avg , 
+        round(min(EXTRACT(HOUR FROM run_time) * 3600
+                    + EXTRACT(MINUTE FROM run_time) * 60 
+                    + EXTRACT(SECOND FROM run_time)),2) min , 
+        round(max(EXTRACT(HOUR FROM run_time) * 3600
+                    + EXTRACT(MINUTE FROM run_time) * 60 
+                    + EXTRACT(SECOND FROM run_time)),2) max 
+from  (
+        select 
+               sql_id,
+               max(sample_time - sql_exec_start) run_time
+        from 
+               gv$active_session_history 
+        where
+               sql_exec_start is not null 
+               and sql_id = '&&sql_id.'
+        group by sql_id,SQL_EXEC_ID
+        order by sql_id 
+       )
+group by sql_id
+order by avg desc
+/
+PRO
 PRO GV$ACTIVE_SESSION_HISTORY 
 PRO ~~~~~~~~~~~~~~~~~~~~~~~~~
 DEF x_slices = '10';
@@ -390,28 +446,27 @@ SELECT others samples,
    AND ROUND(100 * others / samples, 1) > 0.1
 /
 PRO
-PRO DBA_HIST_ACTIVE_SESS_HISTORY (past 7 days by timed event)
-PRO ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-DEF x_days = '7';
+PRO GV$ACTIVE_SESSION_HISTORY - by inst_id
+PRO ~~~~~~~~~~~~~~~~~~~~~~~~~
+DEF x_slices = '10';
+SET PAGES 50000;
+COL samples FOR 999,999,999,999
+COL percent FOR 9,990.0;
+COL timed_event FOR A70;
 WITH
 events AS (
 SELECT /*+ MATERIALIZE */
        CASE h.session_state WHEN 'ON CPU' THEN h.session_state ELSE h.wait_class||' "'||h.event||'"' END timed_event,
+       inst_id,
        COUNT(*) samples
-  FROM dba_hist_active_sess_history h,
-       dba_hist_snapshot s
+  FROM gv$active_session_history h
  WHERE :license = 'Y'
-   AND h.dbid = :dbid 
-   AND h.sql_id = '&&sql_id.'
-   AND h.snap_id BETWEEN &&x_minimum_snap_id. AND &&x_maximum_snap_id.
-   AND s.snap_id = h.snap_id
-   AND s.dbid = h.dbid
-   AND s.instance_number = h.instance_number
-   AND CAST(s.end_interval_time AS DATE) BETWEEN SYSDATE - (&&x_days.) AND SYSDATE
+   AND sql_id = '&&sql_id.'
  GROUP BY
-       CASE h.session_state WHEN 'ON CPU' THEN h.session_state ELSE h.wait_class||' "'||h.event||'"' END
+       CASE h.session_state WHEN 'ON CPU' THEN h.session_state ELSE h.wait_class||' "'||h.event||'"' END,
+       inst_id
  ORDER BY
-       2 DESC
+       3 DESC
 ),
 total AS (
 SELECT SUM(samples) samples,
@@ -420,6 +475,7 @@ SELECT SUM(samples) samples,
 )
 SELECT e.samples,
        ROUND(100 * e.samples / t.samples, 1) percent,
+       e.inst_id,
        e.timed_event
   FROM events e,
        total t
@@ -428,18 +484,11 @@ SELECT e.samples,
  UNION ALL
 SELECT others samples,
        ROUND(100 * others / samples, 1) percent,
+       null inst_id,
        'Others' timed_event
   FROM total
  WHERE others > 0
    AND ROUND(100 * others / samples, 1) > 0.1
-/
-PRO
-PRO AWR History range considered: from &&x_minimum_date. to &&x_maximum_date.
-PRO ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-PRO
-PRO DBA_HIST_ACTIVE_SESS_HISTORY (past 31 days by timed event)
-PRO ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-DEF x_days = '31';
 /
 PRO
 PRO GV$ACTIVE_SESSION_HISTORY 
@@ -494,72 +543,8 @@ SELECT others samples,
    AND ROUND(100 * others / samples, 1) > 0.1
 /
 PRO
-PRO DBA_HIST_ACTIVE_SESS_HISTORY (past 7 days by plan line and timed event)
-PRO ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-DEF x_days = '7';
-WITH
-events AS (
-SELECT /*+ MATERIALIZE */
-       h.sql_plan_hash_value plan_hash_value,
-       NVL(h.sql_plan_line_id, 0) line_id,
-       SUBSTR(h.sql_plan_operation||' '||h.sql_plan_options, 1, 50) operation,
-       CASE h.session_state WHEN 'ON CPU' THEN h.session_state ELSE h.wait_class||' "'||h.event||'"' END timed_event,
-       COUNT(*) samples
-  FROM dba_hist_active_sess_history h,
-       dba_hist_snapshot s
- WHERE :license = 'Y'
-   AND h.dbid = :dbid 
-   AND h.sql_id = '&&sql_id.'
-   AND h.snap_id BETWEEN &&x_minimum_snap_id. AND &&x_maximum_snap_id.
-   AND s.snap_id = h.snap_id
-   AND s.dbid = h.dbid
-   AND s.instance_number = h.instance_number
-   AND CAST(s.end_interval_time AS DATE) BETWEEN SYSDATE - (&&x_days.) AND SYSDATE
- GROUP BY
-       h.sql_plan_hash_value,
-       h.sql_plan_line_id,
-       h.sql_plan_operation,
-       h.sql_plan_options,
-       CASE h.session_state WHEN 'ON CPU' THEN h.session_state ELSE h.wait_class||' "'||h.event||'"' END
- ORDER BY
-       5 DESC
-),
-total AS (
-SELECT SUM(samples) samples,
-       SUM(CASE WHEN ROWNUM > &&x_slices. THEN samples ELSE 0 END) others
-  FROM events
-)
-SELECT e.samples,
-       ROUND(100 * e.samples / t.samples, 1) percent,
-       e.plan_hash_value,
-       e.line_id,
-       e.operation,
-       e.timed_event
-  FROM events e,
-       total t
- WHERE ROWNUM <= &&x_slices.
-   AND ROUND(100 * e.samples / t.samples, 1) > 0.1
- UNION ALL
-SELECT others samples,
-       ROUND(100 * others / samples, 1) percent,
-       TO_NUMBER(NULL) plan_hash_value, 
-       TO_NUMBER(NULL) id, 
-       NULL operation, 
-       'Others' timed_event
-  FROM total
- WHERE others > 0
-   AND ROUND(100 * others / samples, 1) > 0.1
-/
 PRO
-PRO AWR History range considered: from &&x_minimum_date. to &&x_maximum_date.
-PRO ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-PRO
-PRO DBA_HIST_ACTIVE_SESS_HISTORY (past 31 days by plan line and timed event)
-PRO ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-DEF x_days = '31';
-/
-PRO
-PRO GV$ACTIVE_SESSION_HISTORY 
+PRO GV$ACTIVE_SESSION_HISTORY
 PRO ~~~~~~~~~~~~~~~~~~~~~~~~~
 DEF x_slices = '20';
 COL current_object FOR A60;
@@ -572,6 +557,7 @@ SELECT /*+ MATERIALIZE */
        SUBSTR(h.sql_plan_operation||' '||h.sql_plan_options, 1, 50) operation,
        CASE h.session_state WHEN 'ON CPU' THEN -1 ELSE h.current_obj# END current_obj#,
        CASE h.session_state WHEN 'ON CPU' THEN h.session_state ELSE h.wait_class||' "'||h.event||'"' END timed_event,
+       case when px_flags is null then 'SERIAL' else 'px'||trunc(px_flags/2097152) end dop,
        COUNT(*) samples
   FROM gv$active_session_history h
  WHERE :license = 'Y'
@@ -582,9 +568,10 @@ SELECT /*+ MATERIALIZE */
        h.sql_plan_operation,
        h.sql_plan_options,
        CASE h.session_state WHEN 'ON CPU' THEN -1 ELSE h.current_obj# END,
-       CASE h.session_state WHEN 'ON CPU' THEN h.session_state ELSE h.wait_class||' "'||h.event||'"' END
+       CASE h.session_state WHEN 'ON CPU' THEN h.session_state ELSE h.wait_class||' "'||h.event||'"' END,
+       case when px_flags is null then 'SERIAL' else 'px'||trunc(px_flags/2097152) end
  ORDER BY
-       6 DESC
+       7 DESC
 ),
 total AS (
 SELECT SUM(samples) samples,
@@ -596,9 +583,9 @@ SELECT e.samples,
        e.plan_hash_value,
        e.line_id,
        e.operation,
-       SUBSTR(e.current_obj#||TRIM(NVL(
-       (SELECT ' '||o.owner||'.'||o.object_name||' ('||o.object_type||')' FROM dba_objects o WHERE o.object_id = e.current_obj# AND ROWNUM = 1),  
-       (SELECT ' '||o.owner||'.'||o.object_name||' ('||o.object_type||')' FROM dba_objects o WHERE o.data_object_id = e.current_obj# AND ROWNUM = 1) 
+       SUBSTR(e.dop||' '||e.current_obj#||TRIM(NVL(
+       (SELECT ' '||o.owner||'.'||o.object_name||' ('||o.object_type||')' FROM dba_objects o WHERE o.object_id = e.current_obj# AND ROWNUM = 1),
+       (SELECT ' '||o.owner||'.'||o.object_name||' ('||o.object_type||')' FROM dba_objects o WHERE o.data_object_id = e.current_obj# AND ROWNUM = 1)
        )), 1, 60) current_object,
        e.timed_event
   FROM events e,
@@ -608,9 +595,9 @@ SELECT e.samples,
  UNION ALL
 SELECT others samples,
        ROUND(100 * others / samples, 1) percent,
-       TO_NUMBER(NULL) plan_hash_value, 
-       TO_NUMBER(NULL) id, 
-       NULL operation, 
+       TO_NUMBER(NULL) plan_hash_value,
+       TO_NUMBER(NULL) id,
+       NULL operation,
        NULL current_object,
        'Others' timed_event
   FROM total
@@ -618,77 +605,39 @@ SELECT others samples,
    AND ROUND(100 * others / samples, 1) > 0.1
 /
 PRO
-PRO DBA_HIST_ACTIVE_SESS_HISTORY (past 7 days by plan line, obj and timed event)
-PRO ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-DEF x_days = '7';
-WITH
-events AS (
-SELECT /*+ MATERIALIZE */
-       h.sql_plan_hash_value plan_hash_value,
-       NVL(h.sql_plan_line_id, 0) line_id,
-       SUBSTR(h.sql_plan_operation||' '||h.sql_plan_options, 1, 50) operation,
-       CASE h.session_state WHEN 'ON CPU' THEN -1 ELSE h.current_obj# END current_obj#,
-       CASE h.session_state WHEN 'ON CPU' THEN h.session_state ELSE h.wait_class||' "'||h.event||'"' END timed_event,
-       COUNT(*) samples
-  FROM dba_hist_active_sess_history h,
-       dba_hist_snapshot s
- WHERE :license = 'Y'
-   AND h.dbid = :dbid 
-   AND h.sql_id = '&&sql_id.'
-   AND h.snap_id BETWEEN &&x_minimum_snap_id. AND &&x_maximum_snap_id.
-   AND s.snap_id = h.snap_id
-   AND s.dbid = h.dbid
-   AND s.instance_number = h.instance_number
-   AND CAST(s.end_interval_time AS DATE) BETWEEN SYSDATE - (&&x_days.) AND SYSDATE
- GROUP BY
-       h.sql_plan_hash_value,
-       h.sql_plan_line_id,
-       h.sql_plan_operation,
-       h.sql_plan_options,
-       CASE h.session_state WHEN 'ON CPU' THEN -1 ELSE h.current_obj# END,
-       CASE h.session_state WHEN 'ON CPU' THEN h.session_state ELSE h.wait_class||' "'||h.event||'"' END
- ORDER BY
-       6 DESC
-),
-total AS (
-SELECT SUM(samples) samples,
-       SUM(CASE WHEN ROWNUM > &&x_slices. THEN samples ELSE 0 END) others
-  FROM events
-)
-SELECT e.samples,
-       ROUND(100 * e.samples / t.samples, 1) percent,
-       e.plan_hash_value,
-       e.line_id,
-       e.operation,
-       SUBSTR(e.current_obj#||TRIM(NVL(
-       (SELECT ' '||o.owner||'.'||o.object_name||' ('||o.object_type||')' FROM dba_objects o WHERE o.object_id = e.current_obj# AND ROWNUM = 1),  
-       (SELECT ' '||o.owner||'.'||o.object_name||' ('||o.object_type||')' FROM dba_objects o WHERE o.data_object_id = e.current_obj# AND ROWNUM = 1) 
-       )), 1, 60) current_object,
-       e.timed_event
-  FROM events e,
-       total t
- WHERE ROWNUM <= &&x_slices.
-   AND ROUND(100 * e.samples / t.samples, 1) > 0.1
- UNION ALL
-SELECT others samples,
-       ROUND(100 * others / samples, 1) percent,
-       TO_NUMBER(NULL) plan_hash_value, 
-       TO_NUMBER(NULL) id, 
-       NULL operation, 
-       NULL current_object,
-       'Others' timed_event
-  FROM total
- WHERE others > 0
-   AND ROUND(100 * others / samples, 1) > 0.1
+PRO
+PRO GV$ACTIVE_SESSION_HISTORY - px distribution
+PRO ~~~~~~~~~~~~~~~~~~~~~~~~~
+break on sql_exec_start on SQL_EXEC_ID on sql_plan_hash_value on dop
+col dop format a10
+with sql_exec_id_data as (select sql_exec_id,sql_exec_start from
+        (
+        select 
+		       sql_exec_id,
+		       max(sql_exec_start) sql_exec_start
+		from 
+		       gv$active_session_history  
+		where sql_id = '&&sql_id.'
+		and sql_exec_start is not null 
+		group by SQL_EXEC_ID
+		order by sql_exec_start desc 
+        )
+        where rownum < 4)
+select 
+	CAST(max(sql_exec_start) AS TIMESTAMP) sql_exec_start, 
+	sql_exec_id, 
+	sql_plan_hash_value, 
+	case when px_flags is null then 'SERIAL' else 'px'||trunc(px_flags/2097152) end dop, 
+	program, 
+	count(*)
+from gv$active_session_history
+where sql_id = '&&sql_id.'
+and (sql_exec_id,sql_exec_start) in (select sql_exec_id,sql_exec_start from sql_exec_id_data)
+group by sql_exec_id, sql_plan_hash_value, case when px_flags is null then 'SERIAL' else 'px'||trunc(px_flags/2097152) end, program
+order by 1 asc, 6 asc
 /
 PRO
-PRO AWR History range considered: from &&x_minimum_date. to &&x_maximum_date.
-PRO ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 PRO
-PRO DBA_HIST_ACTIVE_SESS_HISTORY (past 31 days by plan line, obj and timed event)
-PRO ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-DEF x_days = '31';
-/
 VAR tables_list CLOB;
 EXEC :tables_list := NULL;
 -- get list of tables from execution plan
@@ -965,6 +914,7 @@ col px3 format 999
 col module format a20
 col RMBs format 99999
 col WMBs format 99999
+col RGB format 9999999999
 col sql_exec_id format 9999999999
 col username format a15
 col sql_text format a70
@@ -982,6 +932,7 @@ select
         round(a.USER_IO_WAIT_TIME/1000000,2) io_tm,
         round((a.PHYSICAL_READ_BYTES/1024/1024)/NULLIF(nvl((a.ELAPSED_TIME/1000000),0),0),2) RMBs,
         round((a.PHYSICAL_WRITE_BYTES/1024/1024)/NULLIF(nvl((a.ELAPSED_TIME/1000000),0),0),2) WMBs,
+        round((a.PHYSICAL_READ_BYTES/1024/1024/1024),2) RGB,
         substr (a.MODULE, 1,16) module,
  a.RM_CONSUMER_GROUP rm_group,  -- new in 11204
         a.SQL_ID,
