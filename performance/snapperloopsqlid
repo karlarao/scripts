@@ -1,0 +1,11 @@
+#!/bin/bash
+
+while :; do
+sqlplus -s "/ as sysdba" <<! &
+spool snapperloopsqlid.txt append
+@snapper all 5 1 "select inst_id, sid from gv\$session a where a.sql_id = '$1'"
+exit
+!
+sleep 10
+echo
+done

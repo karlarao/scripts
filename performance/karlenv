@@ -1,0 +1,158 @@
+# name: environment framework - karlenv
+# source URL: http://karlarao.tiddlyspot.com/#%5B%5Bstep%20by%20step%20environment%5D%5D
+# notes: 
+#      - I've edited/added some lines on the setsid and showsid from 
+#         Coskan's code making it suitable for most unix(solaris,aix,hp-ux)/linux environments http://goo.gl/cqRPK
+#      - added lines of code before and after the setsid and showsid to get the following info:
+#         - software homes installed
+#         - get DBA scripts location
+#         - set alias
+#
+
+# SCRIPTS LOCATION
+export TANEL=~/dba/tanel
+export KERRY=~/dba/scripts
+export KARL=~/dba/karao/scripts/
+export SQLPATH=~/:$TANEL:$KERRY:$KARL
+# ALIAS
+alias s='rlwrap -D2 -irc -b'\''"@(){}[],+=&^%#;|\'\'' -f $TANEL/setup/wordfile_11gR2.txt sqlplus / as sysdba @/tmp/login.sql'
+alias s1='sqlplus / as sysdba @/tmp/login.sql'
+alias oradcli='dcli -l oracle -g ~/dbs_group'
+# alias celldcli='dcli -l root -g /root/cell_group'
+
+
+# MAIN
+cat `cat /etc/oraInst.loc | grep -i inventory | sed 's/..............\(.*\)/\1/'`/ContentsXML/inventory.xml | grep "HOME NAME" 2> /dev/null
+export PATH=""
+export PATH=$HOME/bin:/bin:/usr/bin:/usr/local/bin:/sbin:/usr/sbin:/usr/local/sbin:$ORACLE_HOME/bin:$ORACLE_HOME/OPatch:$SQLPATH:~/dba/bin:$PATH
+export myid="`whoami`@`hostname`"
+export PS1='${myid}':'$PWD':'$ORACLE_SID
+$ '
+export EDITOR=vi
+
+export GLOGIN=`ls /tmp/login.sql 2> /dev/null | wc -l`
+        if [ "$GLOGIN" -eq 1 ] ; then
+                        echo ""
+        else
+						echo "SET SQLPROMPT \"_USER'@'_CONNECT_IDENTIFIER'>' \"
+						SET LINES 260 TIME ON" > /tmp/login.sql
+        fi
+
+setsid ()
+        {
+        unset ORATAB
+        unset ORACLE_BASE
+        unset ORACLE_HOME
+        unset ORACLE_SID
+
+        export ORATAB_OS=`ls /var/opt/oracle/oratab 2> /dev/null | wc -l`
+        if [ "$ORATAB_OS" -eq 1 ] ; then
+                        export ORATAB=/var/opt/oracle/oratab
+        else
+                        export ORATAB=/etc/oratab
+        fi
+
+        export ORAENVFILE=`ls /usr/local/bin/oraenv 2> /dev/null | wc -l`
+        if [ "$ORAENVFILE" -eq 1 ] ; then
+                        echo ""
+        else
+                        cat $ORATAB | grep -v "^#" | grep -v "*"
+                        echo ""
+                        echo "Please enter the ORACLE_HOME: "
+                        read RDBMS_HOME
+                        export ORACLE_HOME=$RDBMS_HOME
+        fi
+
+        if tty -s
+        then
+                if [ -f $ORATAB ]
+                then
+                        line_count=`cat $ORATAB | grep -v "^#" | grep -v "*" | sed 's/:.*//' | wc -l`
+                        # check that the oratab file has some contents
+                        if [ $line_count -ge 1 ]
+                                then
+                                sid_selected=0
+                                while [ $sid_selected -eq 0 ]
+                                do
+                                        sid_available=0
+                                        for i in `cat $ORATAB | grep -v "^#" | grep -v "*" | sed 's/:.*//'`
+                                                do
+                                                sid_available=`expr $sid_available + 1`
+                                                sid[$sid_available]=$i
+                                                done
+                                        # get the required SID
+                                        case ${SETSID_AUTO:-""} in
+                                                YES) # Auto set use 1st entry
+                                                sid_selected=1 ;;
+                                                *)
+                                                i=1
+                                                while [ $i -le $sid_available ]
+                                                do
+                                                        printf "%2d- %10s\n" $i ${sid[$i]}
+                                                        i=`expr $i + 1`
+                                                done
+                                                echo ""
+                                                echo "Select the Oracle SID with given number [1]:"
+                                                read entry
+                                                if [ -n "$entry" ]
+                                                then
+                                                        entry=`echo "$entry" | sed "s/[a-z,A-Z]//g"`
+                                                        if [ -n "$entry" ]
+                                                        then
+                                                                entry=`expr $entry`
+                                                                if [ $entry -ge 1 ] && [ $entry -le $sid_available ]
+                                                                then
+                                                                        sid_selected=$entry
+                                                                fi
+                                                        fi
+                                                        else
+                                                        sid_selected=1
+                                                fi
+                                        esac
+                                done
+                                #
+                                # SET ORACLE_SID
+                                #
+                                export PATH=$HOME/bin:/bin:/usr/bin:/usr/local/bin:/sbin:/usr/sbin:/usr/local/sbin:$ORACLE_HOME/bin:$ORACLE_PATH:$PATH
+                                export ORACLE_SID=${sid[$sid_selected]}
+                                echo "Your profile configured for $ORACLE_SID with information below:"
+                                unset LD_LIBRARY_PATH
+                                ORAENV_ASK=NO
+                                . oraenv
+                                unset ORAENV_ASK
+                                #
+                                #GIVE MESSAGE
+                                #
+                                else
+                                echo "No entries in $ORATAB. no environment set"
+                        fi
+                fi
+        fi
+        }
+
+showsid()
+        {
+        echo ""
+        echo "ORACLE_SID=$ORACLE_SID"
+        echo "ORACLE_BASE=$ORACLE_BASE"
+        echo "ORACLE_HOME=$ORACLE_HOME"
+        echo ""
+        }
+
+# Find oracle_home of running instance
+        export ORATAB_OS=`ls /var/opt/oracle/oratab 2> /dev/null | wc -l`
+        if [ "$ORATAB_OS" -eq 1 ] ; then
+          ps -ef | grep _pmon | grep -v grep
+        else
+          ps -ef | grep pmon | grep -v grep | grep -v bash | grep -v perl |\
+          while read PMON; do
+             INST=`echo $PMON | awk {' print $2, $8 '}`
+             INST_PID=`echo $PMON | awk {' print $2'}`
+             INST_HOME=`ls -l /proc/$INST_PID/exe 2> /dev/null | awk -F'>' '{ print $2 }' | sed 's/bin\/oracle$//' | sort | uniq`
+            echo "$INST $INST_HOME"
+          done
+        fi
+
+# Set Oracle environment 
+setsid
+showsid

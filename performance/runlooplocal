@@ -1,0 +1,10 @@
+#!/bin/bash
+
+while :; do
+sqlplus / as sysdba <<-EOF
+--@sqlmonall2.sql %gluent%
+@sqlmonall2.sql %sys%
+EOF
+sleep 10
+echo
+done

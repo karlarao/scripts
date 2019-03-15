@@ -36,9 +36,6 @@ BEGIN
   SELECT UPPER(SUBSTR(TRIM('&input_license.'), 1, 1)) INTO :license FROM DUAL;
 END;
 /
--- get instance_name
-COL name NEW_V _instname NOPRINT
-select lower(instance_name) name from v$instance;
 -- get dbid
 VAR dbid NUMBER;
 BEGIN
@@ -102,7 +99,7 @@ BEGIN
 END;
 /
 -- spool and sql_text
-SPO planx_&&sql_id._&&current_time-&&_instname..txt;
+SPO planx_&&sql_id._&&current_time..txt;
 PRO SQL_ID: &&sql_id.
 PRO SIGNATURE: &&signature.
 PRO SIGNATUREF: &&signaturef.
@@ -233,11 +230,10 @@ SELECT /*+ ORDERED USE_NL(t) */
   FROM v, TABLE(DBMS_XPLAN.DISPLAY('gv$sql_plan_statistics_all', NULL, 'ADVANCED ALLSTATS LAST', 
        'inst_id = '||v.inst_id||' AND sql_id = '''||v.sql_id||''' AND child_number = '||v.child_number)) t
 /
-CLEAR BREAKS
 PRO
 PRO DBA_HIST_SQLSTAT DELTA (ordered by snap_id DESC, instance_number and plan_hash_value)
 PRO ~~~~~~~~~~~~~~~~~~~~~~
-SET PAGES 50000
+SET PAGES 50000;
 SELECT s.snap_id, 
        TO_CHAR(s.begin_interval_time, 'YYYY-MM-DD HH24:MI:SS') begin_interval_time,
        TO_CHAR(s.end_interval_time, 'YYYY-MM-DD HH24:MI:SS') end_interval_time,
@@ -352,95 +348,6 @@ SELECT /*+ ORDERED USE_NL(t) */
        t.plan_table_output
   FROM v, TABLE(DBMS_XPLAN.DISPLAY_AWR(v.sql_id, v.plan_hash_value, v.dbid, 'ADVANCED')) t
 /  
-CLEAR BREAKS
-PRO
-PRO GV$ACTIVE_SESSION_HISTORY - ash_elap by exec (recent 20)
-PRO ~~~~~~~~~~~~~~~~~~~~~~~~~
-set lines 300
-SET PAGES 50000
-col sql_exec_start format a30
-col run_time_timestamp format a30
-select sql_id, 
-       sql_exec_id,
-       sql_plan_hash_value,
-	   CAST(sql_exec_start AS TIMESTAMP) sql_exec_start,
-       run_time run_time_timestamp, 
- (EXTRACT(HOUR FROM run_time) * 3600
-                    + EXTRACT(MINUTE FROM run_time) * 60 
-                    + EXTRACT(SECOND FROM run_time)) run_time_sec
-from  (
-select 
-       sql_id,
-       sql_exec_id,
-       sql_plan_hash_value,
-       max(sql_exec_start) sql_exec_start,
-       max(sample_time - sql_exec_start) run_time 
-from 
-       gv$active_session_history  
-where sql_id = '&&sql_id.'
-and sql_exec_start is not null 
-group by sql_id,sql_exec_id,sql_plan_hash_value
-order by sql_exec_start desc 
-)
-where rownum < 21
-order by sql_exec_start asc
-/
-PRO
-PRO GV$ACTIVE_SESSION_HISTORY - ash_elap exec avg min max 
-PRO ~~~~~~~~~~~~~~~~~~~~~~~~~
-select sql_plan_hash_value,  
-		count(*),
-        round(avg(EXTRACT(HOUR FROM run_time) * 3600
-                    + EXTRACT(MINUTE FROM run_time) * 60 
-                    + EXTRACT(SECOND FROM run_time)),2) avg , 
-        round(min(EXTRACT(HOUR FROM run_time) * 3600
-                    + EXTRACT(MINUTE FROM run_time) * 60 
-                    + EXTRACT(SECOND FROM run_time)),2) min , 
-        round(max(EXTRACT(HOUR FROM run_time) * 3600
-                    + EXTRACT(MINUTE FROM run_time) * 60 
-                    + EXTRACT(SECOND FROM run_time)),2) max 
-from  (
-        select 
-		       sql_id,
-		       sql_exec_id,
-		       sql_plan_hash_value,
-		       max(sql_exec_start) sql_exec_start,
-               max(sample_time - sql_exec_start) run_time
-        from 
-               gv$active_session_history 
-        where
-               sql_exec_start is not null 
-               and sql_id = '&&sql_id.'
-        group by sql_id,sql_exec_id,sql_plan_hash_value
-       )
-group by sql_plan_hash_value
-union all
-select  null,
-		count(*),
-        round(avg(EXTRACT(HOUR FROM run_time) * 3600
-                    + EXTRACT(MINUTE FROM run_time) * 60 
-                    + EXTRACT(SECOND FROM run_time)),2) avg , 
-        round(min(EXTRACT(HOUR FROM run_time) * 3600
-                    + EXTRACT(MINUTE FROM run_time) * 60 
-                    + EXTRACT(SECOND FROM run_time)),2) min , 
-        round(max(EXTRACT(HOUR FROM run_time) * 3600
-                    + EXTRACT(MINUTE FROM run_time) * 60 
-                    + EXTRACT(SECOND FROM run_time)),2) max 
-from  (
-        select 
-		       sql_id,
-		       sql_exec_id,
-		       sql_plan_hash_value,
-		       max(sql_exec_start) sql_exec_start,
-               max(sample_time - sql_exec_start) run_time
-        from 
-               gv$active_session_history 
-        where
-               sql_exec_start is not null 
-               and sql_id = '&&sql_id.'
-        group by sql_id,sql_exec_id,sql_plan_hash_value
-       )
-/
 PRO
 PRO GV$ACTIVE_SESSION_HISTORY 
 PRO ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -483,27 +390,28 @@ SELECT others samples,
    AND ROUND(100 * others / samples, 1) > 0.1
 /
 PRO
-PRO GV$ACTIVE_SESSION_HISTORY - by inst_id
-PRO ~~~~~~~~~~~~~~~~~~~~~~~~~
-DEF x_slices = '10';
-SET PAGES 50000;
-COL samples FOR 999,999,999,999
-COL percent FOR 9,990.0;
-COL timed_event FOR A70;
+PRO DBA_HIST_ACTIVE_SESS_HISTORY (past 7 days by timed event)
+PRO ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+DEF x_days = '7';
 WITH
 events AS (
 SELECT /*+ MATERIALIZE */
        CASE h.session_state WHEN 'ON CPU' THEN h.session_state ELSE h.wait_class||' "'||h.event||'"' END timed_event,
-       inst_id,
        COUNT(*) samples
-  FROM gv$active_session_history h
+  FROM dba_hist_active_sess_history h,
+       dba_hist_snapshot s
  WHERE :license = 'Y'
-   AND sql_id = '&&sql_id.'
+   AND h.dbid = :dbid 
+   AND h.sql_id = '&&sql_id.'
+   AND h.snap_id BETWEEN &&x_minimum_snap_id. AND &&x_maximum_snap_id.
+   AND s.snap_id = h.snap_id
+   AND s.dbid = h.dbid
+   AND s.instance_number = h.instance_number
+   AND CAST(s.end_interval_time AS DATE) BETWEEN SYSDATE - (&&x_days.) AND SYSDATE
  GROUP BY
-       CASE h.session_state WHEN 'ON CPU' THEN h.session_state ELSE h.wait_class||' "'||h.event||'"' END,
-       inst_id
+       CASE h.session_state WHEN 'ON CPU' THEN h.session_state ELSE h.wait_class||' "'||h.event||'"' END
  ORDER BY
-       3 DESC
+       2 DESC
 ),
 total AS (
 SELECT SUM(samples) samples,
@@ -512,7 +420,6 @@ SELECT SUM(samples) samples,
 )
 SELECT e.samples,
        ROUND(100 * e.samples / t.samples, 1) percent,
-       e.inst_id,
        e.timed_event
   FROM events e,
        total t
@@ -521,11 +428,18 @@ SELECT e.samples,
  UNION ALL
 SELECT others samples,
        ROUND(100 * others / samples, 1) percent,
-       null inst_id,
        'Others' timed_event
   FROM total
  WHERE others > 0
    AND ROUND(100 * others / samples, 1) > 0.1
+/
+PRO
+PRO AWR History range considered: from &&x_minimum_date. to &&x_maximum_date.
+PRO ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+PRO
+PRO DBA_HIST_ACTIVE_SESS_HISTORY (past 31 days by timed event)
+PRO ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+DEF x_days = '31';
 /
 PRO
 PRO GV$ACTIVE_SESSION_HISTORY 
@@ -580,8 +494,72 @@ SELECT others samples,
    AND ROUND(100 * others / samples, 1) > 0.1
 /
 PRO
+PRO DBA_HIST_ACTIVE_SESS_HISTORY (past 7 days by plan line and timed event)
+PRO ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+DEF x_days = '7';
+WITH
+events AS (
+SELECT /*+ MATERIALIZE */
+       h.sql_plan_hash_value plan_hash_value,
+       NVL(h.sql_plan_line_id, 0) line_id,
+       SUBSTR(h.sql_plan_operation||' '||h.sql_plan_options, 1, 50) operation,
+       CASE h.session_state WHEN 'ON CPU' THEN h.session_state ELSE h.wait_class||' "'||h.event||'"' END timed_event,
+       COUNT(*) samples
+  FROM dba_hist_active_sess_history h,
+       dba_hist_snapshot s
+ WHERE :license = 'Y'
+   AND h.dbid = :dbid 
+   AND h.sql_id = '&&sql_id.'
+   AND h.snap_id BETWEEN &&x_minimum_snap_id. AND &&x_maximum_snap_id.
+   AND s.snap_id = h.snap_id
+   AND s.dbid = h.dbid
+   AND s.instance_number = h.instance_number
+   AND CAST(s.end_interval_time AS DATE) BETWEEN SYSDATE - (&&x_days.) AND SYSDATE
+ GROUP BY
+       h.sql_plan_hash_value,
+       h.sql_plan_line_id,
+       h.sql_plan_operation,
+       h.sql_plan_options,
+       CASE h.session_state WHEN 'ON CPU' THEN h.session_state ELSE h.wait_class||' "'||h.event||'"' END
+ ORDER BY
+       5 DESC
+),
+total AS (
+SELECT SUM(samples) samples,
+       SUM(CASE WHEN ROWNUM > &&x_slices. THEN samples ELSE 0 END) others
+  FROM events
+)
+SELECT e.samples,
+       ROUND(100 * e.samples / t.samples, 1) percent,
+       e.plan_hash_value,
+       e.line_id,
+       e.operation,
+       e.timed_event
+  FROM events e,
+       total t
+ WHERE ROWNUM <= &&x_slices.
+   AND ROUND(100 * e.samples / t.samples, 1) > 0.1
+ UNION ALL
+SELECT others samples,
+       ROUND(100 * others / samples, 1) percent,
+       TO_NUMBER(NULL) plan_hash_value, 
+       TO_NUMBER(NULL) id, 
+       NULL operation, 
+       'Others' timed_event
+  FROM total
+ WHERE others > 0
+   AND ROUND(100 * others / samples, 1) > 0.1
+/
 PRO
-PRO GV$ACTIVE_SESSION_HISTORY
+PRO AWR History range considered: from &&x_minimum_date. to &&x_maximum_date.
+PRO ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+PRO
+PRO DBA_HIST_ACTIVE_SESS_HISTORY (past 31 days by plan line and timed event)
+PRO ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+DEF x_days = '31';
+/
+PRO
+PRO GV$ACTIVE_SESSION_HISTORY 
 PRO ~~~~~~~~~~~~~~~~~~~~~~~~~
 DEF x_slices = '20';
 COL current_object FOR A60;
@@ -594,7 +572,6 @@ SELECT /*+ MATERIALIZE */
        SUBSTR(h.sql_plan_operation||' '||h.sql_plan_options, 1, 50) operation,
        CASE h.session_state WHEN 'ON CPU' THEN -1 ELSE h.current_obj# END current_obj#,
        CASE h.session_state WHEN 'ON CPU' THEN h.session_state ELSE h.wait_class||' "'||h.event||'"' END timed_event,
-       case when px_flags is null then 'SERIAL' else 'px'||trunc(px_flags/2097152) end dop,
        COUNT(*) samples
   FROM gv$active_session_history h
  WHERE :license = 'Y'
@@ -605,10 +582,9 @@ SELECT /*+ MATERIALIZE */
        h.sql_plan_operation,
        h.sql_plan_options,
        CASE h.session_state WHEN 'ON CPU' THEN -1 ELSE h.current_obj# END,
-       CASE h.session_state WHEN 'ON CPU' THEN h.session_state ELSE h.wait_class||' "'||h.event||'"' END,
-       case when px_flags is null then 'SERIAL' else 'px'||trunc(px_flags/2097152) end
+       CASE h.session_state WHEN 'ON CPU' THEN h.session_state ELSE h.wait_class||' "'||h.event||'"' END
  ORDER BY
-       7 DESC
+       6 DESC
 ),
 total AS (
 SELECT SUM(samples) samples,
@@ -620,9 +596,9 @@ SELECT e.samples,
        e.plan_hash_value,
        e.line_id,
        e.operation,
-       SUBSTR(e.dop||' '||e.current_obj#||TRIM(NVL(
-       (SELECT ' '||o.owner||'.'||o.object_name||' ('||o.object_type||')' FROM dba_objects o WHERE o.object_id = e.current_obj# AND ROWNUM = 1),
-       (SELECT ' '||o.owner||'.'||o.object_name||' ('||o.object_type||')' FROM dba_objects o WHERE o.data_object_id = e.current_obj# AND ROWNUM = 1)
+       SUBSTR(e.current_obj#||TRIM(NVL(
+       (SELECT ' '||o.owner||'.'||o.object_name||' ('||o.object_type||')' FROM dba_objects o WHERE o.object_id = e.current_obj# AND ROWNUM = 1),  
+       (SELECT ' '||o.owner||'.'||o.object_name||' ('||o.object_type||')' FROM dba_objects o WHERE o.data_object_id = e.current_obj# AND ROWNUM = 1) 
        )), 1, 60) current_object,
        e.timed_event
   FROM events e,
@@ -632,9 +608,9 @@ SELECT e.samples,
  UNION ALL
 SELECT others samples,
        ROUND(100 * others / samples, 1) percent,
-       TO_NUMBER(NULL) plan_hash_value,
-       TO_NUMBER(NULL) id,
-       NULL operation,
+       TO_NUMBER(NULL) plan_hash_value, 
+       TO_NUMBER(NULL) id, 
+       NULL operation, 
        NULL current_object,
        'Others' timed_event
   FROM total
@@ -642,43 +618,77 @@ SELECT others samples,
    AND ROUND(100 * others / samples, 1) > 0.1
 /
 PRO
-PRO
-PRO GV$ACTIVE_SESSION_HISTORY - px distribution
-PRO ~~~~~~~~~~~~~~~~~~~~~~~~~
-break on sql_exec_start on SQL_EXEC_ID on sql_plan_hash_value on dop
-col dop format a10
-col program format a60
-with sql_exec_id_data as (select sql_exec_id,sql_exec_start from
-        (
-        select 
-		       sql_exec_id,
-		       max(sql_exec_start) sql_exec_start
-		from 
-		       gv$active_session_history  
-		where sql_id = '&&sql_id.'
-		and sql_exec_start is not null 
-		group by SQL_EXEC_ID
-		order by sql_exec_start desc 
-        )
-        where rownum < 4)
-select 
-	CAST(max(sql_exec_start) AS TIMESTAMP) sql_exec_start, 
-	sql_exec_id, 
-	sql_plan_hash_value, 
-	sql_plan_line_id,
-	case when px_flags is null then 'SERIAL' else 'px'||trunc(px_flags/2097152) end dop, 
-	program, 
-	count(*)
-from gv$active_session_history
-where sql_id = '&&sql_id.'
-and (sql_exec_id,sql_exec_start) in (select sql_exec_id,sql_exec_start from sql_exec_id_data)
-group by sql_exec_id, sql_plan_hash_value, sql_plan_line_id, case when px_flags is null then 'SERIAL' else 'px'||trunc(px_flags/2097152) end, program
-order by 1 asc, 4 asc, 6 asc
+PRO DBA_HIST_ACTIVE_SESS_HISTORY (past 7 days by plan line, obj and timed event)
+PRO ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+DEF x_days = '7';
+WITH
+events AS (
+SELECT /*+ MATERIALIZE */
+       h.sql_plan_hash_value plan_hash_value,
+       NVL(h.sql_plan_line_id, 0) line_id,
+       SUBSTR(h.sql_plan_operation||' '||h.sql_plan_options, 1, 50) operation,
+       CASE h.session_state WHEN 'ON CPU' THEN -1 ELSE h.current_obj# END current_obj#,
+       CASE h.session_state WHEN 'ON CPU' THEN h.session_state ELSE h.wait_class||' "'||h.event||'"' END timed_event,
+       COUNT(*) samples
+  FROM dba_hist_active_sess_history h,
+       dba_hist_snapshot s
+ WHERE :license = 'Y'
+   AND h.dbid = :dbid 
+   AND h.sql_id = '&&sql_id.'
+   AND h.snap_id BETWEEN &&x_minimum_snap_id. AND &&x_maximum_snap_id.
+   AND s.snap_id = h.snap_id
+   AND s.dbid = h.dbid
+   AND s.instance_number = h.instance_number
+   AND CAST(s.end_interval_time AS DATE) BETWEEN SYSDATE - (&&x_days.) AND SYSDATE
+ GROUP BY
+       h.sql_plan_hash_value,
+       h.sql_plan_line_id,
+       h.sql_plan_operation,
+       h.sql_plan_options,
+       CASE h.session_state WHEN 'ON CPU' THEN -1 ELSE h.current_obj# END,
+       CASE h.session_state WHEN 'ON CPU' THEN h.session_state ELSE h.wait_class||' "'||h.event||'"' END
+ ORDER BY
+       6 DESC
+),
+total AS (
+SELECT SUM(samples) samples,
+       SUM(CASE WHEN ROWNUM > &&x_slices. THEN samples ELSE 0 END) others
+  FROM events
+)
+SELECT e.samples,
+       ROUND(100 * e.samples / t.samples, 1) percent,
+       e.plan_hash_value,
+       e.line_id,
+       e.operation,
+       SUBSTR(e.current_obj#||TRIM(NVL(
+       (SELECT ' '||o.owner||'.'||o.object_name||' ('||o.object_type||')' FROM dba_objects o WHERE o.object_id = e.current_obj# AND ROWNUM = 1),  
+       (SELECT ' '||o.owner||'.'||o.object_name||' ('||o.object_type||')' FROM dba_objects o WHERE o.data_object_id = e.current_obj# AND ROWNUM = 1) 
+       )), 1, 60) current_object,
+       e.timed_event
+  FROM events e,
+       total t
+ WHERE ROWNUM <= &&x_slices.
+   AND ROUND(100 * e.samples / t.samples, 1) > 0.1
+ UNION ALL
+SELECT others samples,
+       ROUND(100 * others / samples, 1) percent,
+       TO_NUMBER(NULL) plan_hash_value, 
+       TO_NUMBER(NULL) id, 
+       NULL operation, 
+       NULL current_object,
+       'Others' timed_event
+  FROM total
+ WHERE others > 0
+   AND ROUND(100 * others / samples, 1) > 0.1
 /
-CLEAR BREAKS
-
 PRO
+PRO AWR History range considered: from &&x_minimum_date. to &&x_maximum_date.
+PRO ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 PRO
+PRO DBA_HIST_ACTIVE_SESS_HISTORY (past 31 days by plan line, obj and timed event)
+PRO ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+DEF x_days = '31';
+/
 VAR tables_list CLOB;
 EXEC :tables_list := NULL;
 -- get list of tables from execution plan
@@ -936,10 +946,10 @@ SELECT i.index_owner||'.'||i.index_name||' '||c.column_name index_and_column_nam
        i.column_position
 /
 
--- PRO
--- PRO SNAPPER
--- PRO ~~~~~~~~~~~~~~~~~~~~~~
--- @snapper all 2 1 "select inst_id, sid from gv$session a where a.sql_id = '&&sql_id.'"
+PRO
+PRO SNAPPER
+PRO ~~~~~~~~~~~~~~~~~~~~~~
+@snapper all 2 1 "select inst_id, sid from gv$session a where a.sql_id = '&&sql_id.'"
 
 PRO 
 PRO GV_SQL_MONITOR 
@@ -955,7 +965,6 @@ col px3 format 999
 col module format a20
 col RMBs format 99999
 col WMBs format 99999
-col RGB format 9999999999
 col sql_exec_id format 9999999999
 col username format a15
 col sql_text format a70
@@ -973,7 +982,6 @@ select
         round(a.USER_IO_WAIT_TIME/1000000,2) io_tm,
         round((a.PHYSICAL_READ_BYTES/1024/1024)/NULLIF(nvl((a.ELAPSED_TIME/1000000),0),0),2) RMBs,
         round((a.PHYSICAL_WRITE_BYTES/1024/1024)/NULLIF(nvl((a.ELAPSED_TIME/1000000),0),0),2) WMBs,
-        round((a.PHYSICAL_READ_BYTES/1024/1024/1024),2) RGB,
         substr (a.MODULE, 1,16) module,
  a.RM_CONSUMER_GROUP rm_group,  -- new in 11204
         a.SQL_ID,
@@ -991,40 +999,6 @@ where a.sql_id = b.sql_id
 and a.inst_id = b.inst_id
 and a.sql_child_address = b.child_address
 and a.status in ('QUEUED','EXECUTING')
-and a.SQL_ID = '&&sql_id.'
-order by a.status, a.SQL_EXEC_START, a.SQL_EXEC_ID, a.PX_SERVERS_ALLOCATED, a.PX_SERVER_SET, a.PX_SERVER# asc
-/
-
-select
-        a.status,
-        decode(b.IO_CELL_OFFLOAD_ELIGIBLE_BYTES,0,'N','Y') Offload,
-        decode(b.IO_CELL_OFFLOAD_ELIGIBLE_BYTES,0,'Y','N') InMemPX,
-        a.INST_ID inst,
-        a.SID,
-        b.EXECUTIONS exec,
-        round(a.ELAPSED_TIME/1000000,2) ela_tm,
-        round(a.CPU_TIME/1000000,2) cpu_tm,
-        round(a.USER_IO_WAIT_TIME/1000000,2) io_tm,
-        round((a.PHYSICAL_READ_BYTES/1024/1024)/NULLIF(nvl((a.ELAPSED_TIME/1000000),0),0),2) RMBs,
-        round((a.PHYSICAL_WRITE_BYTES/1024/1024)/NULLIF(nvl((a.ELAPSED_TIME/1000000),0),0),2) WMBs,
-        round((a.PHYSICAL_READ_BYTES/1024/1024/1024),2) RGB,
-        substr (a.MODULE, 1,16) module,
- a.RM_CONSUMER_GROUP rm_group,  -- new in 11204
-        a.SQL_ID,
-        a.SQL_PLAN_HASH_VALUE PHV,
-        a.sql_exec_id,
-        a.USERNAME,
-        CASE WHEN a.PX_SERVERS_ALLOCATED IS NULL THEN NULL WHEN a.PX_SERVERS_ALLOCATED = 0 THEN 1 ELSE a.PX_SERVERS_ALLOCATED END PX1,
-        CASE WHEN a.PX_SERVER_SET IS NULL THEN NULL WHEN a.PX_SERVER_SET = 0 THEN 1 ELSE a.PX_SERVER_SET END PX2,
-        CASE WHEN a.PX_SERVER# IS NULL THEN NULL WHEN a.PX_SERVER# = 0 THEN 1 ELSE a.PX_SERVER# END PX3,
-        to_char(a.SQL_EXEC_START,'MMDDYY HH24:MI:SS') SQL_EXEC_START,
-        -- to_char((a.SQL_EXEC_START + round(a.ELAPSED_TIME/1000000,2)/86400),'MMDDYY HH24:MI:SS') SQL_EXEC_END,
-        substr(a.SQL_TEXT, 1,70) sql_text
-from gv$sql_monitor a, gv$sql b
-where a.sql_id = b.sql_id
-and a.inst_id = b.inst_id
-and a.sql_child_address = b.child_address
-and a.status in ('DONE','DONE (ALL ROWS)')
 and a.SQL_ID = '&&sql_id.'
 order by a.status, a.SQL_EXEC_START, a.SQL_EXEC_ID, a.PX_SERVERS_ALLOCATED, a.PX_SERVER_SET, a.PX_SERVER# asc
 /
@@ -1071,10 +1045,13 @@ and a.sql_id = '&&sql_id.'
 order by hours desc, sql_id, child
 /
 
+
 -- spool off and cleanup
 PRO
-PRO planx_&&sql_id._&&current_time-&&_instname..txt has been generated
+PRO planx_&&sql_id._&&current_time..txt has been generated
 SET FEED ON VER ON LIN 80 PAGES 14 LONG 80 LONGC 80 TRIMS OFF;
 SPO OFF;
 UNDEF 1 2
 -- end
+
+

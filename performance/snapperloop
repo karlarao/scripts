@@ -1,0 +1,11 @@
+#!/bin/bash
+
+while :; do
+sqlplus -s "/ as sysdba" <<! &
+spool snaploop.txt append
+@snapper all 5 1 $1
+exit
+!
+sleep 10
+echo
+done

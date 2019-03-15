@@ -37,6 +37,9 @@ BEGIN
   SELECT UPPER(SUBSTR(TRIM('&input_license.'), 1, 1)) INTO :license FROM DUAL;
 END;
 /
+-- get instance_name
+COL name NEW_V _instname NOPRINT
+select lower(instance_name) name from v$instance;
 -- get dbid
 VAR dbid NUMBER;
 BEGIN
@@ -100,7 +103,7 @@ BEGIN
 END;
 /
 -- spool and sql_text
-SPO &&planxdir\planx_&&sql_id._&&current_time..txt;
+SPO &&planxdir\planx_&&sql_id._&&current_time-&&_instname..txt;
 PRO SQL_ID: &&sql_id.
 PRO SIGNATURE: &&signature.
 PRO SIGNATUREF: &&signaturef.
@@ -236,7 +239,7 @@ CLEAR BREAKS
 PRO
 PRO DBA_HIST_SQLSTAT DELTA (ordered by snap_id DESC, instance_number and plan_hash_value)
 PRO ~~~~~~~~~~~~~~~~~~~~~~
-SET PAGES 50000;
+SET PAGES 50000
 SELECT s.snap_id, 
        TO_CHAR(s.begin_interval_time, 'YYYY-MM-DD HH24:MI:SS') begin_interval_time,
        TO_CHAR(s.end_interval_time, 'YYYY-MM-DD HH24:MI:SS') end_interval_time,
@@ -357,7 +360,7 @@ PRO
 PRO GV$ACTIVE_SESSION_HISTORY - ash_elap by exec (recent 20)
 PRO ~~~~~~~~~~~~~~~~~~~~~~~~~
 set lines 300
-SET PAGES 50000;
+SET PAGES 50000
 col sql_exec_start format a30
 col run_time_timestamp format a30
 select sql_id, 
@@ -1266,7 +1269,7 @@ CLEAR BREAKS
 
 -- spool off and cleanup
 PRO
-PRO planx_&&sql_id._&&current_time..txt has been generated
+PRO planx_&&sql_id._&&current_time-&&_instname..txt has been generated
 SET FEED ON VER ON LIN 80 PAGES 14 LONG 80 LONGC 80 TRIMS OFF;
 SPO OFF;
 UNDEF 1 2

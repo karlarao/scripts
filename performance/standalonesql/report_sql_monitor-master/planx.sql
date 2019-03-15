@@ -36,9 +36,6 @@ BEGIN
   SELECT UPPER(SUBSTR(TRIM('&input_license.'), 1, 1)) INTO :license FROM DUAL;
 END;
 /
--- get instance_name
-COL name NEW_V _instname NOPRINT
-select lower(instance_name) name from v$instance;
 -- get dbid
 VAR dbid NUMBER;
 BEGIN
@@ -102,7 +99,7 @@ BEGIN
 END;
 /
 -- spool and sql_text
-SPO planx_&&sql_id._&&current_time-&&_instname..txt;
+SPO planx_&&sql_id._&&current_time..txt;
 PRO SQL_ID: &&sql_id.
 PRO SIGNATURE: &&signature.
 PRO SIGNATUREF: &&signaturef.
@@ -233,11 +230,10 @@ SELECT /*+ ORDERED USE_NL(t) */
   FROM v, TABLE(DBMS_XPLAN.DISPLAY('gv$sql_plan_statistics_all', NULL, 'ADVANCED ALLSTATS LAST', 
        'inst_id = '||v.inst_id||' AND sql_id = '''||v.sql_id||''' AND child_number = '||v.child_number)) t
 /
-CLEAR BREAKS
 PRO
 PRO DBA_HIST_SQLSTAT DELTA (ordered by snap_id DESC, instance_number and plan_hash_value)
 PRO ~~~~~~~~~~~~~~~~~~~~~~
-SET PAGES 50000
+SET PAGES 50000;
 SELECT s.snap_id, 
        TO_CHAR(s.begin_interval_time, 'YYYY-MM-DD HH24:MI:SS') begin_interval_time,
        TO_CHAR(s.end_interval_time, 'YYYY-MM-DD HH24:MI:SS') end_interval_time,
@@ -352,12 +348,10 @@ SELECT /*+ ORDERED USE_NL(t) */
        t.plan_table_output
   FROM v, TABLE(DBMS_XPLAN.DISPLAY_AWR(v.sql_id, v.plan_hash_value, v.dbid, 'ADVANCED')) t
 /  
-CLEAR BREAKS
 PRO
 PRO GV$ACTIVE_SESSION_HISTORY - ash_elap by exec (recent 20)
 PRO ~~~~~~~~~~~~~~~~~~~~~~~~~
 set lines 300
-SET PAGES 50000
 col sql_exec_start format a30
 col run_time_timestamp format a30
 select sql_id, 
@@ -675,8 +669,6 @@ and (sql_exec_id,sql_exec_start) in (select sql_exec_id,sql_exec_start from sql_
 group by sql_exec_id, sql_plan_hash_value, sql_plan_line_id, case when px_flags is null then 'SERIAL' else 'px'||trunc(px_flags/2097152) end, program
 order by 1 asc, 4 asc, 6 asc
 /
-CLEAR BREAKS
-
 PRO
 PRO
 VAR tables_list CLOB;
@@ -936,10 +928,10 @@ SELECT i.index_owner||'.'||i.index_name||' '||c.column_name index_and_column_nam
        i.column_position
 /
 
--- PRO
--- PRO SNAPPER
--- PRO ~~~~~~~~~~~~~~~~~~~~~~
--- @snapper all 2 1 "select inst_id, sid from gv$session a where a.sql_id = '&&sql_id.'"
+PRO
+PRO SNAPPER
+PRO ~~~~~~~~~~~~~~~~~~~~~~
+@snapper all 2 1 "select inst_id, sid from gv$session a where a.sql_id = '&&sql_id.'"
 
 PRO 
 PRO GV_SQL_MONITOR 
@@ -1071,10 +1063,13 @@ and a.sql_id = '&&sql_id.'
 order by hours desc, sql_id, child
 /
 
+
 -- spool off and cleanup
 PRO
-PRO planx_&&sql_id._&&current_time-&&_instname..txt has been generated
+PRO planx_&&sql_id._&&current_time..txt has been generated
 SET FEED ON VER ON LIN 80 PAGES 14 LONG 80 LONGC 80 TRIMS OFF;
 SPO OFF;
 UNDEF 1 2
 -- end
+
+

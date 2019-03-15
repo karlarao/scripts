@@ -1,0 +1,11 @@
+#!/bin/bash
+
+while :; do
+sqlplus / as sysdba <<-EOF
+spool snapx.txt append
+--@sqlmonall2.sql %gluent%
+@sqlmonall2.sql %sys%
+EOF
+sleep 10
+echo
+done

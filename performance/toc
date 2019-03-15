@@ -1,0 +1,7 @@
+echo "$1" | sed 's/ /-/g' | awk '{print tolower($0)}' > toc_tmp.txt
+
+for i in `cat toc_tmp.txt`; do 
+	echo "* [$1](#$i)"
+done
+
+rm toc_tmp.txt

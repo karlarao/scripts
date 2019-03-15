@@ -1,0 +1,1 @@
+echo "sql monitor $1" | mailx -s "sql monitor $1" -a $1 "email@example.com"

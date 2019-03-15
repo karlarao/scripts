@@ -1,0 +1,4 @@
+./asm_metrics.pl -show=dbinst -display=snap,avg -interval=5 -sort_field=iops
+./asm_metrics.pl  -show=dbinst,dg -display=snap,avg -interval=5 -sort_field=iops
+
+
