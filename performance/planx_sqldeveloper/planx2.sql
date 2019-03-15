@@ -783,58 +783,6 @@ CLEAR BREAKS
 --PRO ~~~~~~~~~~~~~~~~~~~
 --SELECT :tables_list tables_list FROM DUAL;
 --SET HEAD ON;
-
-DELETE plan_table WHERE statement_id = 'sql_id_object';
-INSERT INTO plan_table (statement_id, object_owner, object_name)
-select 'sql_id_object', owner,table_name
-from (WITH object AS (
-                            SELECT /*+ MATERIALIZE */
-                                object_owner owner, object_name name
-                            FROM gv$sql_plan
-                            WHERE inst_id IN (SELECT inst_id FROM gv$instance)
-                            AND sql_id = '&&sql_id.'
-                            AND object_owner IS NOT NULL
-                            AND object_name IS NOT NULL
-                            UNION
-                            SELECT object_owner owner, object_name name
-                            FROM dba_hist_sql_plan
-                            WHERE
-                                dbid = (select dbid from v$database)
-                            AND sql_id = '&&sql_id.'
-                            AND object_owner IS NOT NULL
-                            AND object_name IS NOT NULL
-                            UNION
-                            SELECT o.owner, o.object_name name
-                            FROM gv$active_session_history h,
-                                dba_objects o
-                            WHERE
-                                h.sql_id = '&&sql_id.'
-                            AND h.current_obj# > 0
-                            AND o.object_id = h.current_obj#
-                            UNION
-                            SELECT o.owner, o.object_name name
-                            FROM dba_hist_active_sess_history h,
-                                dba_objects o
-                            WHERE
-                                h.dbid = (select dbid from v$database)
-                            AND h.sql_id = '&&sql_id.'
-                            AND h.current_obj# > 0
-                            AND o.object_id = h.current_obj#
-                            )
-                            select owner,table_name from (
-                            SELECT t.owner, t.table_name
-                            FROM dba_tab_statistics t,
-                                object o
-                            WHERE t.owner = o.owner
-                            AND t.table_name = o.name
-                            UNION
-                            SELECT i.table_owner, i.table_name
-                            FROM dba_indexes i,
-                                object o
-                            WHERE i.owner = o.owner
-                            AND i.index_name = o.name))
-/
-
 PRO
 PRO Tables Accessed 
 PRO ~~~~~~~~~~~~~~~
@@ -850,9 +798,52 @@ SELECT owner||'.'||table_name table_name,
        global_stats,
        compression
   FROM dba_tables
- WHERE (owner, table_name) IN (select object_owner, object_name 
-                              from plan_table
-                              where statement_id = 'sql_id_object')
+ WHERE (owner, table_name) IN (WITH object AS (
+                    SELECT /*+ MATERIALIZE */
+                        object_owner owner, object_name name
+                    FROM gv$sql_plan
+                    WHERE inst_id IN (SELECT inst_id FROM gv$instance)
+                    AND sql_id = '&&sql_id.'
+                    AND object_owner IS NOT NULL
+                    AND object_name IS NOT NULL
+                    UNION
+                    SELECT object_owner owner, object_name name
+                    FROM dba_hist_sql_plan
+                    WHERE
+                        dbid = (select dbid from v$database)
+                    AND sql_id = '&&sql_id.'
+                    AND object_owner IS NOT NULL
+                    AND object_name IS NOT NULL
+                    UNION
+                    SELECT o.owner, o.object_name name
+                    FROM gv$active_session_history h,
+                        dba_objects o
+                    WHERE
+                        h.sql_id = '&&sql_id.'
+                    AND h.current_obj# > 0
+                    AND o.object_id = h.current_obj#
+                    UNION
+                    SELECT o.owner, o.object_name name
+                    FROM dba_hist_active_sess_history h,
+                        dba_objects o
+                    WHERE
+                        h.dbid = (select dbid from v$database)
+                    AND h.sql_id = '&&sql_id.'
+                    AND h.current_obj# > 0
+                    AND o.object_id = h.current_obj#
+                    )
+                    select owner,table_name from (
+                    SELECT t.owner, t.table_name
+                    FROM dba_tab_statistics t,
+                        object o
+                    WHERE t.owner = o.owner
+                    AND t.table_name = o.name
+                    UNION
+                    SELECT i.table_owner, i.table_name
+                    FROM dba_indexes i,
+                        object o
+                    WHERE i.owner = o.owner
+                    AND i.index_name = o.name))
  ORDER BY
        owner,
        table_name
@@ -879,9 +870,52 @@ SELECT i.table_owner||'.'||i.table_name||' '||i.owner||'.'||i.index_name table_a
        TO_CHAR(i.last_analyzed, 'YYYY-MM-DD HH24:MI:SS') last_analyzed,
        i.global_stats
   FROM dba_indexes i
- WHERE (i.table_owner, i.table_name) IN (select object_owner, object_name 
-                              from plan_table
-                              where statement_id = 'sql_id_object')
+ WHERE (i.table_owner, i.table_name) IN (WITH object AS (
+                    SELECT /*+ MATERIALIZE */
+                        object_owner owner, object_name name
+                    FROM gv$sql_plan
+                    WHERE inst_id IN (SELECT inst_id FROM gv$instance)
+                    AND sql_id = '&&sql_id.'
+                    AND object_owner IS NOT NULL
+                    AND object_name IS NOT NULL
+                    UNION
+                    SELECT object_owner owner, object_name name
+                    FROM dba_hist_sql_plan
+                    WHERE
+                        dbid = (select dbid from v$database)
+                    AND sql_id = '&&sql_id.'
+                    AND object_owner IS NOT NULL
+                    AND object_name IS NOT NULL
+                    UNION
+                    SELECT o.owner, o.object_name name
+                    FROM gv$active_session_history h,
+                        dba_objects o
+                    WHERE
+                        h.sql_id = '&&sql_id.'
+                    AND h.current_obj# > 0
+                    AND o.object_id = h.current_obj#
+                    UNION
+                    SELECT o.owner, o.object_name name
+                    FROM dba_hist_active_sess_history h,
+                        dba_objects o
+                    WHERE
+                        h.dbid = (select dbid from v$database)
+                    AND h.sql_id = '&&sql_id.'
+                    AND h.current_obj# > 0
+                    AND o.object_id = h.current_obj#
+                    )
+                    select owner,table_name from (
+                    SELECT t.owner, t.table_name
+                    FROM dba_tab_statistics t,
+                        object o
+                    WHERE t.owner = o.owner
+                    AND t.table_name = o.name
+                    UNION
+                    SELECT i.table_owner, i.table_name
+                    FROM dba_indexes i,
+                        object o
+                    WHERE i.owner = o.owner
+                    AND i.index_name = o.name))
  ORDER BY
        i.table_owner,
        i.table_name,
@@ -915,9 +949,52 @@ DECLARE
 BEGIN
   FOR i IN (SELECT owner, table_name, column_name, data_type, low_value, high_value
               FROM dba_tab_cols
-             WHERE (owner, table_name) IN (select object_owner, object_name 
-                              from plan_table
-                              where statement_id = 'sql_id_object'))
+             WHERE (owner, table_name) IN (WITH object AS (
+                    SELECT /*+ MATERIALIZE */
+                        object_owner owner, object_name name
+                    FROM gv$sql_plan
+                    WHERE inst_id IN (SELECT inst_id FROM gv$instance)
+                    AND sql_id = '&&sql_id.'
+                    AND object_owner IS NOT NULL
+                    AND object_name IS NOT NULL
+                    UNION
+                    SELECT object_owner owner, object_name name
+                    FROM dba_hist_sql_plan
+                    WHERE
+                        dbid = (select dbid from v$database)
+                    AND sql_id = '&&sql_id.'
+                    AND object_owner IS NOT NULL
+                    AND object_name IS NOT NULL
+                    UNION
+                    SELECT o.owner, o.object_name name
+                    FROM gv$active_session_history h,
+                        dba_objects o
+                    WHERE
+                        h.sql_id = '&&sql_id.'
+                    AND h.current_obj# > 0
+                    AND o.object_id = h.current_obj#
+                    UNION
+                    SELECT o.owner, o.object_name name
+                    FROM dba_hist_active_sess_history h,
+                        dba_objects o
+                    WHERE
+                        h.dbid = (select dbid from v$database)
+                    AND h.sql_id = '&&sql_id.'
+                    AND h.current_obj# > 0
+                    AND o.object_id = h.current_obj#
+                    )
+                    select owner,table_name from (
+                    SELECT t.owner, t.table_name
+                    FROM dba_tab_statistics t,
+                        object o
+                    WHERE t.owner = o.owner
+                    AND t.table_name = o.name
+                    UNION
+                    SELECT i.table_owner, i.table_name
+                    FROM dba_indexes i,
+                        object o
+                    WHERE i.owner = o.owner
+                    AND i.index_name = o.name)))
   LOOP
     l_low := compute_low_high(i.data_type, i.low_value);
     l_high := compute_low_high(i.data_type, i.high_value);
@@ -952,9 +1029,52 @@ SELECT c.owner||'.'||c.table_name||' '||c.column_name table_and_column_name,
        c.avg_col_len
   FROM dba_tab_cols c,
        plan_table p
- WHERE (c.owner, c.table_name) IN (select object_owner, object_name 
-                              from plan_table
-                              where statement_id = 'sql_id_object')
+ WHERE (c.owner, c.table_name) IN (WITH object AS (
+                    SELECT /*+ MATERIALIZE */
+                        object_owner owner, object_name name
+                    FROM gv$sql_plan
+                    WHERE inst_id IN (SELECT inst_id FROM gv$instance)
+                    AND sql_id = '&&sql_id.'
+                    AND object_owner IS NOT NULL
+                    AND object_name IS NOT NULL
+                    UNION
+                    SELECT object_owner owner, object_name name
+                    FROM dba_hist_sql_plan
+                    WHERE
+                        dbid = (select dbid from v$database)
+                    AND sql_id = '&&sql_id.'
+                    AND object_owner IS NOT NULL
+                    AND object_name IS NOT NULL
+                    UNION
+                    SELECT o.owner, o.object_name name
+                    FROM gv$active_session_history h,
+                        dba_objects o
+                    WHERE
+                        h.sql_id = '&&sql_id.'
+                    AND h.current_obj# > 0
+                    AND o.object_id = h.current_obj#
+                    UNION
+                    SELECT o.owner, o.object_name name
+                    FROM dba_hist_active_sess_history h,
+                        dba_objects o
+                    WHERE
+                        h.dbid = (select dbid from v$database)
+                    AND h.sql_id = '&&sql_id.'
+                    AND h.current_obj# > 0
+                    AND o.object_id = h.current_obj#
+                    )
+                    select owner,table_name from (
+                    SELECT t.owner, t.table_name
+                    FROM dba_tab_statistics t,
+                        object o
+                    WHERE t.owner = o.owner
+                    AND t.table_name = o.name
+                    UNION
+                    SELECT i.table_owner, i.table_name
+                    FROM dba_indexes i,
+                        object o
+                    WHERE i.owner = o.owner
+                    AND i.index_name = o.name))
    AND p.statement_id(+) = 'low_high'
    AND p.object_owner(+) = c.owner
    AND p.object_name(+) = c.table_name
@@ -986,9 +1106,52 @@ SELECT i.index_owner||'.'||i.index_name||' '||c.column_name index_and_column_nam
   FROM dba_ind_columns i,
        dba_tab_cols c,
        plan_table p
- WHERE (i.table_owner, i.table_name) IN (select object_owner, object_name 
-                              from plan_table
-                              where statement_id = 'sql_id_object')
+ WHERE (i.table_owner, i.table_name) IN (WITH object AS (
+                    SELECT /*+ MATERIALIZE */
+                        object_owner owner, object_name name
+                    FROM gv$sql_plan
+                    WHERE inst_id IN (SELECT inst_id FROM gv$instance)
+                    AND sql_id = '&&sql_id.'
+                    AND object_owner IS NOT NULL
+                    AND object_name IS NOT NULL
+                    UNION
+                    SELECT object_owner owner, object_name name
+                    FROM dba_hist_sql_plan
+                    WHERE
+                        dbid = (select dbid from v$database)
+                    AND sql_id = '&&sql_id.'
+                    AND object_owner IS NOT NULL
+                    AND object_name IS NOT NULL
+                    UNION
+                    SELECT o.owner, o.object_name name
+                    FROM gv$active_session_history h,
+                        dba_objects o
+                    WHERE
+                        h.sql_id = '&&sql_id.'
+                    AND h.current_obj# > 0
+                    AND o.object_id = h.current_obj#
+                    UNION
+                    SELECT o.owner, o.object_name name
+                    FROM dba_hist_active_sess_history h,
+                        dba_objects o
+                    WHERE
+                        h.dbid = (select dbid from v$database)
+                    AND h.sql_id = '&&sql_id.'
+                    AND h.current_obj# > 0
+                    AND o.object_id = h.current_obj#
+                    )
+                    select owner,table_name from (
+                    SELECT t.owner, t.table_name
+                    FROM dba_tab_statistics t,
+                        object o
+                    WHERE t.owner = o.owner
+                    AND t.table_name = o.name
+                    UNION
+                    SELECT i.table_owner, i.table_name
+                    FROM dba_indexes i,
+                        object o
+                    WHERE i.owner = o.owner
+                    AND i.index_name = o.name))
    AND c.owner = i.table_owner
    AND c.table_name = i.table_name
    AND c.column_name = i.column_name
