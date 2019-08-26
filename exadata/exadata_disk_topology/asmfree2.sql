@@ -38,10 +38,10 @@ BEGIN
 
    SELECT substr(version,1,8), substr(instance_name,1,1)    INTO v_db_version, v_inst_name    FROM v$instance;
 
-   IF v_inst_name <> '+' THEN
-      DBMS_OUTPUT.PUT_LINE('ERROR: THIS IS NOT AN ASM INSTANCE!  PLEASE LOG ON TO AN ASM INSTANCE AND RE-RUN THIS SCRIPT.');
-      GOTO the_end;
-   END IF;
+--   IF v_inst_name <> '+' THEN
+--      DBMS_OUTPUT.PUT_LINE('ERROR: THIS IS NOT AN ASM INSTANCE!  PLEASE LOG ON TO AN ASM INSTANCE AND RE-RUN THIS SCRIPT.');
+--      GOTO the_end;
+--   END IF;
 
     DBMS_OUTPUT.PUT_LINE('------ DISK and CELL Failure Diskgroup Space Reserve Requirements  ------');
     DBMS_OUTPUT.PUT_LINE(' This procedure determines how much space you need to survive a DISK or CELL failure. It also shows the usable space ');
@@ -57,10 +57,12 @@ BEGIN
 
    IF (v_db_version = '11.2.0.3') OR (v_db_version = '11.2.0.4') OR (v_db_version = '12.1.0.1') OR (v_db_version = '12.1.0.2') THEN
       v_req_mirror_free_adj_factor := 1.10;
-      DBMS_OUTPUT.PUT_LINE('ASM Version: '||v_db_version);
+      -- DBMS_OUTPUT.PUT_LINE('ASM Version: '||v_db_version);
+      DBMS_OUTPUT.PUT_LINE('Instance Version: '||v_db_version);
    ELSE
       v_req_mirror_free_adj_factor := 1.5;
-      DBMS_OUTPUT.PUT_LINE('ASM Version: '||v_db_version||'  - WARNING DISK FAILURE COVERAGE ESTIMATES HAVE NOT BEEN VERIFIED ON THIS VERSION!');
+      -- DBMS_OUTPUT.PUT_LINE('ASM Version: '||v_db_version||'  - WARNING DISK FAILURE COVERAGE ESTIMATES HAVE NOT BEEN VERIFIED ON THIS VERSION!');
+      DBMS_OUTPUT.PUT_LINE('Instance Version: '||v_db_version||'  - WARNING DISK FAILURE COVERAGE ESTIMATES HAVE NOT BEEN VERIFIED ON THIS VERSION!');
    END IF;
 
    DBMS_OUTPUT.PUT_LINE('.  .  .');
