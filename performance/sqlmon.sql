@@ -34,7 +34,7 @@ select
         round((a.PHYSICAL_WRITE_BYTES/1024/1024)/NULLIF(nvl((a.ELAPSED_TIME/1000000),0),0),2) WMBs,
         round((a.PHYSICAL_READ_BYTES/1024/1024/1024),2) RGB,
         substr (a.MODULE, 1,16) module,
- a.RM_CONSUMER_GROUP rm_group,  -- new in 11204
+-- a.RM_CONSUMER_GROUP rm_group,  -- new in 11204
         a.SQL_ID,
         a.SQL_PLAN_HASH_VALUE PHV,
         a.sql_exec_id,
@@ -93,8 +93,8 @@ and username is not null
 and a.sql_id = b.sql_id
 and a.inst_id = b.inst_id
 and a.sql_child_number = b.child_number
-and sql_text not like 'select a.inst_id inst, sid, substr(program,1,19) prog, b.sql_id, child_number child,%' -- don't show this query
-and sql_text not like 'declare%' -- skip PL/SQL blocks
+--and sql_text not like 'select a.inst_id inst, sid, substr(program,1,19) prog, b.sql_id, child_number child,%' -- don't show this query
+--and sql_text not like 'declare%' -- skip PL/SQL blocks
 order by mins desc, sql_id, child
 /
 

@@ -99,10 +99,22 @@ BEGIN
 END;
 /
 -- spool and sql_text
-SPO planx_&&sql_id._&&current_time..txt;
+COLUMN xconname NEW_VALUE _xconname NOPRINT
+select sys_context('userenv', 'con_name') xconname from dual;
+
+COLUMN name NEW_VALUE _xdbname NOPRINT
+select name from v$database;
+
+COLUMN name NEW_VALUE _instname NOPRINT
+select instance_name name from v$instance;
+
+SPO planxhist_&&_xdbname-&&_instname-&&_xconname-&&sql_id._&&current_time..txt;
 PRO SQL_ID: &&sql_id.
 PRO SIGNATURE: &&signature.
 PRO SIGNATUREF: &&signaturef.
+PRO DB NAME: &&_xdbname
+PRO INSTANCE NAME: &&_instname
+PRO PDB NAME: &&_xconname
 PRO
 SET PAGES 0;
 PRINT :sql_text;
@@ -319,7 +331,8 @@ select ss.snap_id, ss.instance_number node, begin_interval_time, sql_id, plan_ha
 nvl(executions_delta,0) execs,
 (elapsed_time_delta/decode(nvl(executions_delta,0),0,1,executions_delta))/1000000 avg_etime,
 (buffer_gets_delta/decode(nvl(buffer_gets_delta,0),0,1,executions_delta)) avg_lio,
-(io_offload_elig_bytes_delta/decode(nvl(buffer_gets_delta,0),0,1,executions_delta)) avg_offload
+(io_offload_elig_bytes_delta/decode(nvl(buffer_gets_delta,0),0,1,executions_delta)) avg_offload,
+s.parsing_schema_name
 from DBA_HIST_SQLSTAT S, DBA_HIST_SNAPSHOT SS
 where S.sql_id = '&&sql_id.'
 and ss.dbid = :dbid
@@ -946,10 +959,9 @@ SELECT i.index_owner||'.'||i.index_name||' '||c.column_name index_and_column_nam
        i.column_position
 /
 
-PRO
-PRO SNAPPER
-PRO ~~~~~~~~~~~~~~~~~~~~~~
-@snapper all 2 1 "select inst_id, sid from gv$session a where a.sql_id = '&&sql_id.'"
+--PRO
+--PRO SNAPPER
+--PRO ~~~~~~~~~~~~~~~~~~~~~~
 
 PRO 
 PRO GV_SQL_MONITOR 
@@ -1048,8 +1060,8 @@ order by hours desc, sql_id, child
 
 -- spool off and cleanup
 PRO
-PRO planx_&&sql_id._&&current_time..txt has been generated
-SET FEED ON VER ON LIN 80 PAGES 14 LONG 80 LONGC 80 TRIMS OFF;
+PRO planxhist_&&_xdbname-&&_instname-&&_xconname-&&sql_id._&&current_time..txt has been generated
+SET FEED ON VER ON LIN 80 PAGES 14 LONG 80 LONGC 80 TRIMS OFF TERM ON;
 SPO OFF;
 UNDEF 1 2
 -- end

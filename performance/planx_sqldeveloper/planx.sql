@@ -1001,11 +1001,11 @@ SELECT i.index_owner||'.'||i.index_name||' '||c.column_name index_and_column_nam
        i.index_name,
        i.column_position
 /
---
---PRO
---PRO SNAPPER
---PRO ~~~~~~~~~~~~~~~~~~~~~~
---@snapper all 2 1 "select inst_id, sid from gv$session a where a.sql_id = '&&sql_id.'"
+
+-- PRO
+-- PRO SNAPPER
+-- PRO ~~~~~~~~~~~~~~~~~~~~~~
+-- @snapper all 2 1 "select inst_id, sid from gv$session a where a.sql_id = '&&sql_id.'"
 
 PRO 
 PRO GV_SQL_MONITOR 

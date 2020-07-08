@@ -36,9 +36,6 @@ BEGIN
   SELECT UPPER(SUBSTR(TRIM('&input_license.'), 1, 1)) INTO :license FROM DUAL;
 END;
 /
--- get instance_name
-COL name NEW_V _instname NOPRINT
-select lower(instance_name) name from v$instance;
 -- get dbid
 VAR dbid NUMBER;
 BEGIN
@@ -102,10 +99,23 @@ BEGIN
 END;
 /
 -- spool and sql_text
-SPO planx_&&sql_id._&&current_time-&&_instname..txt;
+
+COLUMN xconname NEW_VALUE _xconname NOPRINT
+select sys_context('userenv', 'con_name') xconname from dual;
+
+COLUMN name NEW_VALUE _xdbname NOPRINT
+select name from v$database;
+
+COLUMN name NEW_VALUE _instname NOPRINT
+select instance_name name from v$instance;
+
+SPO planx_&&_xdbname-&&_instname-&&_xconname-&&sql_id._&&current_time..txt;
 PRO SQL_ID: &&sql_id.
 PRO SIGNATURE: &&signature.
 PRO SIGNATUREF: &&signaturef.
+PRO DB NAME: &&_xdbname
+PRO INSTANCE NAME: &&_instname
+PRO PDB NAME: &&_xconname
 PRO
 SET PAGES 0;
 PRINT :sql_text;
@@ -323,7 +333,8 @@ select ss.snap_id, ss.instance_number node, begin_interval_time, sql_id, plan_ha
 nvl(executions_delta,0) execs,
 (elapsed_time_delta/decode(nvl(executions_delta,0),0,1,executions_delta))/1000000 avg_etime,
 (buffer_gets_delta/decode(nvl(buffer_gets_delta,0),0,1,executions_delta)) avg_lio,
-(io_offload_elig_bytes_delta/decode(nvl(buffer_gets_delta,0),0,1,executions_delta)) avg_offload
+(io_offload_elig_bytes_delta/decode(nvl(buffer_gets_delta,0),0,1,executions_delta)) avg_offload,
+s.parsing_schema_name
 from DBA_HIST_SQLSTAT S, DBA_HIST_SNAPSHOT SS
 where S.sql_id = '&&sql_id.'
 and ss.dbid = :dbid
@@ -354,41 +365,91 @@ SELECT /*+ ORDERED USE_NL(t) */
 /  
 CLEAR BREAKS
 PRO
-PRO GV$ACTIVE_SESSION_HISTORY - ash_elap by exec (recent 20)
+PRO GV$ACTIVE_SESSION_HISTORY - ash_elap by exec (recent)
 PRO ~~~~~~~~~~~~~~~~~~~~~~~~~
 set lines 300
 SET PAGES 50000
 col sql_exec_start format a30
 col run_time_timestamp format a30
-select sql_id, 
+select 'realtime' source, sql_id, 
        sql_exec_id,
        sql_plan_hash_value,
-	   CAST(sql_exec_start AS TIMESTAMP) sql_exec_start,
+       CAST(sql_exec_start AS TIMESTAMP) sql_exec_start,
        run_time run_time_timestamp, 
  (EXTRACT(HOUR FROM run_time) * 3600
                     + EXTRACT(MINUTE FROM run_time) * 60 
-                    + EXTRACT(SECOND FROM run_time)) run_time_sec
+                    + EXTRACT(SECOND FROM run_time)) run_time_sec,
+       round(temp/1024/1024,2) temp_mb,
+       round(pga/1024/1024,2) pga_mb,
+       round(rbytes/1024/1024,2) read_mb,
+       round(wbytes/1024/1024,2) write_mb,
+       riops,
+       wiops
 from  (
 select 
        sql_id,
        sql_exec_id,
        sql_plan_hash_value,
        max(sql_exec_start) sql_exec_start,
-       max(sample_time - sql_exec_start) run_time 
+       max(sample_time - sql_exec_start) run_time,
+       max(TEMP_SPACE_ALLOCATED) temp,
+       max(PGA_ALLOCATED) pga,
+       max(DELTA_READ_IO_BYTES) rbytes,
+       max(DELTA_READ_IO_REQUESTS) riops,
+       max(DELTA_WRITE_IO_BYTES) wbytes,
+       max(DELTA_WRITE_IO_REQUESTS) wiops
 from 
-       gv$active_session_history  
+       v$active_session_history
 where sql_id = '&&sql_id.'
 and sql_exec_start is not null 
 group by sql_id,sql_exec_id,sql_plan_hash_value
 order by sql_exec_start desc 
 )
 where rownum < 21
-order by sql_exec_start asc
-/
+order by 1, sql_exec_start asc
+/ 
+
+select 'historical' source, sql_id, 
+       sql_exec_id,
+       sql_plan_hash_value,
+       CAST(sql_exec_start AS TIMESTAMP) sql_exec_start,
+       run_time run_time_timestamp, 
+ (EXTRACT(HOUR FROM run_time) * 3600
+                    + EXTRACT(MINUTE FROM run_time) * 60 
+                    + EXTRACT(SECOND FROM run_time)) run_time_sec,
+       round(temp/1024/1024,2) temp_mb,
+       round(pga/1024/1024,2) pga_mb,
+       round(rbytes/1024/1024,2) read_mb,
+       round(wbytes/1024/1024,2) write_mb,
+       riops,
+       wiops
+from  (
+select 
+       sql_id,
+       sql_exec_id,
+       sql_plan_hash_value,
+       max(sql_exec_start) sql_exec_start,
+       max(sample_time - sql_exec_start) run_time,
+       max(TEMP_SPACE_ALLOCATED) temp,
+       max(PGA_ALLOCATED) pga,
+       max(DELTA_READ_IO_BYTES) rbytes,
+       max(DELTA_READ_IO_REQUESTS) riops,
+       max(DELTA_WRITE_IO_BYTES) wbytes,
+       max(DELTA_WRITE_IO_REQUESTS) wiops
+from 
+       dba_hist_active_sess_history
+where sql_id = '&&sql_id.'
+and sql_exec_start is not null 
+group by sql_id,sql_exec_id,sql_plan_hash_value
+order by sql_exec_start desc 
+)
+where rownum < 21
+order by 1, sql_exec_start asc
+/ 
 PRO
 PRO GV$ACTIVE_SESSION_HISTORY - ash_elap exec avg min max 
 PRO ~~~~~~~~~~~~~~~~~~~~~~~~~
-select sql_plan_hash_value,  
+select 'realtime' source, sql_plan_hash_value,  
 		count(*),
         round(avg(EXTRACT(HOUR FROM run_time) * 3600
                     + EXTRACT(MINUTE FROM run_time) * 60 
@@ -415,7 +476,7 @@ from  (
        )
 group by sql_plan_hash_value
 union all
-select  null,
+select  null, null,
 		count(*),
         round(avg(EXTRACT(HOUR FROM run_time) * 3600
                     + EXTRACT(MINUTE FROM run_time) * 60 
@@ -435,6 +496,60 @@ from  (
                max(sample_time - sql_exec_start) run_time
         from 
                gv$active_session_history 
+        where
+               sql_exec_start is not null 
+               and sql_id = '&&sql_id.'
+        group by sql_id,sql_exec_id,sql_plan_hash_value
+       )
+/
+
+select 'historical' source, sql_plan_hash_value,  
+        count(*),
+        round(avg(EXTRACT(HOUR FROM run_time) * 3600
+                    + EXTRACT(MINUTE FROM run_time) * 60 
+                    + EXTRACT(SECOND FROM run_time)),2) avg , 
+        round(min(EXTRACT(HOUR FROM run_time) * 3600
+                    + EXTRACT(MINUTE FROM run_time) * 60 
+                    + EXTRACT(SECOND FROM run_time)),2) min , 
+        round(max(EXTRACT(HOUR FROM run_time) * 3600
+                    + EXTRACT(MINUTE FROM run_time) * 60 
+                    + EXTRACT(SECOND FROM run_time)),2) max 
+from  (
+        select 
+               sql_id,
+               sql_exec_id,
+               sql_plan_hash_value,
+               max(sql_exec_start) sql_exec_start,
+               max(sample_time - sql_exec_start) run_time
+        from 
+               dba_hist_active_sess_history 
+        where
+               sql_exec_start is not null 
+               and sql_id = '&&sql_id.'
+        group by sql_id,sql_exec_id,sql_plan_hash_value
+       )
+group by sql_plan_hash_value
+union all
+select  null, null,
+        count(*),
+        round(avg(EXTRACT(HOUR FROM run_time) * 3600
+                    + EXTRACT(MINUTE FROM run_time) * 60 
+                    + EXTRACT(SECOND FROM run_time)),2) avg , 
+        round(min(EXTRACT(HOUR FROM run_time) * 3600
+                    + EXTRACT(MINUTE FROM run_time) * 60 
+                    + EXTRACT(SECOND FROM run_time)),2) min , 
+        round(max(EXTRACT(HOUR FROM run_time) * 3600
+                    + EXTRACT(MINUTE FROM run_time) * 60 
+                    + EXTRACT(SECOND FROM run_time)),2) max 
+from  (
+        select 
+               sql_id,
+               sql_exec_id,
+               sql_plan_hash_value,
+               max(sql_exec_start) sql_exec_start,
+               max(sample_time - sql_exec_start) run_time
+        from 
+               dba_hist_active_sess_history
         where
                sql_exec_start is not null 
                and sql_id = '&&sql_id.'
@@ -467,7 +582,7 @@ SELECT SUM(samples) samples,
        SUM(CASE WHEN ROWNUM > &&x_slices. THEN samples ELSE 0 END) others
   FROM events
 )
-SELECT e.samples,
+SELECT 'realtime' source, e.samples,
        ROUND(100 * e.samples / t.samples, 1) percent,
        e.timed_event
   FROM events e,
@@ -475,12 +590,48 @@ SELECT e.samples,
  WHERE ROWNUM <= &&x_slices.
    AND ROUND(100 * e.samples / t.samples, 1) > 0.1
  UNION ALL
-SELECT others samples,
+SELECT null, others samples,
        ROUND(100 * others / samples, 1) percent,
        'Others' timed_event
   FROM total
  WHERE others > 0
    AND ROUND(100 * others / samples, 1) > 0.1
+   order by 2 desc
+/
+
+WITH
+events AS (
+SELECT /*+ MATERIALIZE */
+       CASE h.session_state WHEN 'ON CPU' THEN h.session_state ELSE h.wait_class||' "'||h.event||'"' END timed_event,
+       COUNT(*) samples
+  FROM dba_hist_active_sess_history h
+ WHERE :license = 'Y'
+   AND sql_id = '1g10r6kwgmv30'
+ GROUP BY
+       CASE h.session_state WHEN 'ON CPU' THEN h.session_state ELSE h.wait_class||' "'||h.event||'"' END
+ ORDER BY
+       2 DESC
+),
+total AS (
+SELECT SUM(samples) samples,
+       SUM(CASE WHEN ROWNUM > &&x_slices. THEN samples ELSE 0 END) others
+  FROM events
+)
+SELECT 'historical' source, e.samples,
+       ROUND(100 * e.samples / t.samples, 1) percent,
+       e.timed_event
+  FROM events e,
+       total t
+ WHERE ROWNUM <= &&x_slices.
+   AND ROUND(100 * e.samples / t.samples, 1) > 0.1
+ UNION ALL
+SELECT null, others samples,
+       ROUND(100 * others / samples, 1) percent,
+       'Others' timed_event
+  FROM total
+ WHERE others > 0
+   AND ROUND(100 * others / samples, 1) > 0.1
+   order by 2 desc
 /
 PRO
 PRO GV$ACTIVE_SESSION_HISTORY - by inst_id
@@ -510,7 +661,7 @@ SELECT SUM(samples) samples,
        SUM(CASE WHEN ROWNUM > &&x_slices. THEN samples ELSE 0 END) others
   FROM events
 )
-SELECT e.samples,
+SELECT 'realtime' source, e.samples,
        ROUND(100 * e.samples / t.samples, 1) percent,
        e.inst_id,
        e.timed_event
@@ -519,13 +670,53 @@ SELECT e.samples,
  WHERE ROWNUM <= &&x_slices.
    AND ROUND(100 * e.samples / t.samples, 1) > 0.1
  UNION ALL
-SELECT others samples,
+SELECT null, others samples,
        ROUND(100 * others / samples, 1) percent,
        null inst_id,
        'Others' timed_event
   FROM total
  WHERE others > 0
    AND ROUND(100 * others / samples, 1) > 0.1
+   order by 2 desc
+/
+
+WITH
+events AS (
+SELECT /*+ MATERIALIZE */
+       CASE h.session_state WHEN 'ON CPU' THEN h.session_state ELSE h.wait_class||' "'||h.event||'"' END timed_event,
+       instance_number,
+       COUNT(*) samples
+  FROM dba_hist_active_sess_history h
+ WHERE :license = 'Y'
+   AND sql_id = '&&sql_id.'
+ GROUP BY
+       CASE h.session_state WHEN 'ON CPU' THEN h.session_state ELSE h.wait_class||' "'||h.event||'"' END,
+       instance_number
+ ORDER BY
+       3 DESC
+),
+total AS (
+SELECT SUM(samples) samples,
+       SUM(CASE WHEN ROWNUM > &&x_slices. THEN samples ELSE 0 END) others
+  FROM events
+)
+SELECT 'historical' source, e.samples,
+       ROUND(100 * e.samples / t.samples, 1) percent,
+       e.instance_number,
+       e.timed_event
+  FROM events e,
+       total t
+ WHERE ROWNUM <= &&x_slices.
+   AND ROUND(100 * e.samples / t.samples, 1) > 0.1
+ UNION ALL
+SELECT null, others samples,
+       ROUND(100 * others / samples, 1) percent,
+       null instance_number,
+       'Others' timed_event
+  FROM total
+ WHERE others > 0
+   AND ROUND(100 * others / samples, 1) > 0.1
+   order by 2 desc
 /
 PRO
 PRO GV$ACTIVE_SESSION_HISTORY 
@@ -1065,16 +1256,17 @@ and username is not null
 and a.sql_id = b.sql_id
 and a.inst_id = b.inst_id
 and a.sql_child_number = b.child_number
-and sql_text not like 'select a.inst_id inst, sid, substr(program,1,19) prog, b.sql_id, child_number child,%' -- don't show this query
-and sql_text not like 'declare%' -- skip PL/SQL blocks
+--and sql_text not like 'select a.inst_id inst, sid, substr(program,1,19) prog, b.sql_id, child_number child,%' -- don't show this query
+--and sql_text not like 'declare%' -- skip PL/SQL blocks
 and a.sql_id = '&&sql_id.'
 order by hours desc, sql_id, child
-/
+..
 
 -- spool off and cleanup
 PRO
-PRO planx_&&sql_id._&&current_time-&&_instname..txt has been generated
-SET FEED ON VER ON LIN 80 PAGES 14 LONG 80 LONGC 80 TRIMS OFF;
+PRO planx_&&_xdbname-&&_instname-&&_xconname-&&sql_id._&&current_time..txt has been generated
+SET FEED ON VER ON LIN 80 PAGES 14 LONG 80 LONGC 80 TRIMS OFF TERM ON;
 SPO OFF;
 UNDEF 1 2
 -- end
+

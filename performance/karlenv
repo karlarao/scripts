@@ -10,15 +10,17 @@
 #
 
 # SCRIPTS LOCATION
-export TANEL=~/dba/tanel
-export KERRY=~/dba/scripts
-export KARL=~/dba/karao/scripts/
+#export TANEL=~/dba/tanel
+#export KERRY=~/dba/scripts
+export KARL=/home/karl/dean/scripts-master/performance
 export SQLPATH=~/:$TANEL:$KERRY:$KARL
 # ALIAS
 alias s='rlwrap -D2 -irc -b'\''"@(){}[],+=&^%#;|\'\'' -f $TANEL/setup/wordfile_11gR2.txt sqlplus / as sysdba @/tmp/login.sql'
 alias s1='sqlplus / as sysdba @/tmp/login.sql'
 alias oradcli='dcli -l oracle -g ~/dbs_group'
 # alias celldcli='dcli -l root -g /root/cell_group'
+#alias sqlplus ='/drives/c/oracle/instantclient_12_2/sqlplus.exe'
+#alias sqlplus = '/drives/c/cygwin64/home/karl/clientname/scripts-master/performance/sqlplus'
 
 
 # MAIN

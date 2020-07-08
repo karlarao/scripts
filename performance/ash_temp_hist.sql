@@ -37,9 +37,9 @@ TOP_LEVEL_SQL_ID,
        from
        dba_hist_active_sess_history
        where
-       sample_time >= to_date ('2018/10/01 00:00:00','YYYY/MM/DD HH24:MI:SS')
-       and sample_time < to_date ('2018/10/16 03:10:00','YYYY/MM/DD HH24:MI:SS')
-       and sql_exec_start is not null
+       -- sample_time >= to_date ('2018/10/01 00:00:00','YYYY/MM/DD HH24:MI:SS')
+       -- and sample_time < to_date ('2018/10/16 03:10:00','YYYY/MM/DD HH24:MI:SS')
+       sql_exec_start is not null
        and IS_SQLID_CURRENT='Y'
        )
 group by sql_id,TOP_LEVEL_SQL_ID,SQL_EXEC_ID,sql_exec_start
