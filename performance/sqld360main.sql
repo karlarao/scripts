@@ -149,6 +149,9 @@ END;
 
 
 
+
+
+
 -- planx_hist                                                         
 set head off
 col operation format a50
@@ -159,6 +162,9 @@ select '@planx Y ' ||operation from plan_table;
 -- select '@gluent_sqlmon.sql sql_id=' ||operation from plan_table;
 
 select '@planx_hist Y ' ||operation from plan_table;
+
+
+select '@sqlhc.sql T ' ||operation from plan_table;
 
 
 SPO OFF 
