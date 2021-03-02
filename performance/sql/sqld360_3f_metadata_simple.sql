@@ -91,6 +91,8 @@ SELECT 'Completed: ' x, TO_CHAR(SYSDATE, 'HH24:MI:SS') current_time FROM DUAL;
 SPO OFF;
 SET TERM OFF PAGES 50000
 
+EXECUTE DBMS_METADATA.SET_TRANSFORM_PARAM(DBMS_METADATA.SESSION_TRANSFORM,'DEFAULT');
+
 HOS zip -q &&sqld360_main_filename._&&sqld360_file_time. &&sqld360_log..txt
 
 -- update main report
