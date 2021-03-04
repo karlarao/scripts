@@ -9,6 +9,8 @@ INSERT INTO plan_table (id, statement_id, operation, options, object_node) value
 ! mv planx_*&psqlid* dir_&psqlid
 ! mv sqlmon_*&psqlid* dir_&psqlid
 ! mv sqlmon_invalid* dir_&psqlid
+! mv sqlhc_*&psqlid* dir_&psqlid
+! mv planxhist_*&psqlid* dir_&psqlid
 
 exit
 
