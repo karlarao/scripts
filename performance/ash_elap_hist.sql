@@ -29,7 +29,7 @@ order by sql_exec_start desc
 )
 where rownum < 1000
 )
-where run_time_sec < &run_time_sec
+where run_time_sec > &run_time_sec
 order by sql_exec_start asc
 /
 PRO
