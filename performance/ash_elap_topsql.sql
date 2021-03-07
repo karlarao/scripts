@@ -51,10 +51,15 @@ from  (
                and ash.sql_opcode=aud.action
                and ash.user_id = pschema.user_id 
 --               and sql_id = '0nx0wbcfa71gf'
+--               and pschema.username not in ('SYS','SYSTEM','DBSNMP','SYSMAN','AUDSYS','MDSYS','ORDSYS','XDB','APEX_PUBLIC_USER','ORACLE_OCM','APEX_050100','GSMADMIN_INTERNAL','ORDS_METADATA','XFILES','MYDBA','XDBEXT')
         group by ash.sql_id,aud.name,ash.module,pschema.username,ash.sql_exec_id,ash.sql_plan_hash_value
        )
 --where pct_cpu > 90
+--where pct_io > 90
+--where pct_wait > 90
 group by sql_id,sql_type,module,parsing_schema
-order by elap_max desc)
+order by elap_max desc nulls last
+--order by max_read_mb desc nulls last
+)
 where rownum < 51;
 
