@@ -22,6 +22,16 @@ action,
  ORDER by action_time;
 
  
+SELECT TO_CHAR(action_time, 'YYYY-MM-DD HH24:MI:SS')  as action_time,
+action,
+ status,
+ description,
+ source_version,
+ target_version,
+ patch_id
+ FROM   sys.dba_registry_sqlpatch
+ ORDER by action_time;
+
 
 COL cv_cellname       HEAD CELL_NAME        FOR A20
 COL cv_cell_path      HEAD CELL_PATH        FOR A30
