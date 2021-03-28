@@ -1,0 +1,549 @@
+#!/bin/env python
+
+##################################################################################################
+#  Name:        asmfiles                                                                         #
+#  Author:      Randy Johnson                                                                    #
+#  Description: ASM Storage by Diskgroup, by Database, by Type, by File                          #
+#                                                                                                #
+#  usage: asmfiles [options]                                                                     #
+#                                                                                                #
+#  options:                                                                                      #
+#    -h, --help   show this help message and exit                                                #
+#    -a           All files report                                                               #
+#    -d           Database report                                                                #
+#    -f DBFILTER  Database filter (case sensitive)                                               #
+#    -g           Diskgroup report                                                               #
+#    -r           Replay using picked results                                                    #
+#    -s           print SQL query                                                                #
+#    -t           File type report                                                               #
+#    -v           print version info                                                             #
+#                                                                                                #
+# History:                                                                                       #
+#                                                                                                #
+# Date       Ver. Who              Change Description                                            #
+# ---------- ---- ---------------- ------------------------------------------------------------- #
+# 06/25/2014 1.00 Randy Johnson    Initial write.                                                #
+# 10/05/2014 2.00 Randy Johnson    Several changes to reports.                                   #
+# 10/05/2014 2.10 Randy Johnson    Report enhancements.                                          #
+# 01/31/2015 2.20 Randy Johnson    Added as second part to the File Type report that breaks down #
+#                                  by disk group.                                                #
+##################################################################################################
+
+# --------------------------------------
+# ---- Import Python Modules -----------
+# --------------------------------------
+from cPickle    import dump, load
+from datetime   import datetime
+from locale     import setlocale, format, LC_ALL
+from math       import floor, log, pow
+from optparse   import OptionParser
+from os         import environ, path
+from os.path    import basename, isfile
+from string     import upper
+from sys        import argv
+from Oracle     import RunSqlplus, PrintError, SetOracleEnv, exit
+
+# --------------------------------------
+# ---- Function Definitions ------------
+# --------------------------------------
+
+# Def : ConvertSize()
+# Desc: Reduces the size of a number from Bytes .. Yeta Bytes
+# Args: s    = numeric_string
+#       tSep = thousands_separation_character (default is ',')
+#       dSep = decimal_separation_character (default is '.')
+# Retn: formatted string
+#---------------------------------------------------------------------------
+def ConvertSize(bytes):
+   size_name = ("B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB")
+   s = 0
+      
+   if (bytes > 0):
+     i = int(floor(log(bytes,1024)))
+     p = pow(1024,i)
+     s = round(bytes/p,2)
+   
+   if (s > 0):
+     return '%s %s' % (s,size_name[i])
+   else:
+     return '0B'
+   
+   #if (bytes > 0):
+   #  i = int(floor(log(bytes,1024)))
+   #  p = pow(1024,i)
+   #  s = round(bytes/p,2)
+   #  
+   #  if (s > 0):
+   #    return '%s %s' % (s,size_name[i])
+   #  else:
+   #    return '0B'
+# End ConvertSize
+
+# Def : SplitThousands()
+# Desc: Simple function to format numbers with commas to separate thousands.
+# Args: s    = numeric_string
+#       tSep = thousands_separation_character (default is ',')
+#       dSep = decimal_separation_character (default is '.')
+# Retn: formatted string
+#---------------------------------------------------------------------------
+def SplitThousands( s, tSep=',', dSep='.'):
+  '''Splits a general float on thousands. GIGO on general input'''
+  if s == None:
+    return(0)
+  if not isinstance( s, str ):
+    s = str( s )
+
+  cnt=0
+  numChars=dSep+'0123456789'
+  ls=len(s)
+  while cnt < ls and s[cnt] not in numChars: cnt += 1
+
+  lhs = s[ 0:cnt ]
+  s = s[ cnt: ]
+  if dSep == '':
+    cnt = -1
+  else:
+    cnt = s.rfind( dSep )
+  if cnt > 0:
+    rhs = dSep + s[ cnt+1: ]
+    s = s[ :cnt ]
+  else:
+    rhs = ''
+
+  splt=''
+  while s != '':
+    splt= s[ -3: ] + tSep + splt
+    s = s[ :-3 ]
+
+  return(lhs + splt[ :-1 ] + rhs)
+# End splitThousands
+
+# --------------------------------------
+# ---- End Function Definitions --------
+# --------------------------------------
+
+
+# --------------------------------------
+# ---- Main Program --------------------
+# --------------------------------------
+if (__name__ == '__main__'):      # if this is true, then this script is *not* being imported by another Python script.
+  Cmd            = path.split(argv[0])[1]
+  CmdDesc        = 'ASM Space Usage Utility (' + Cmd + ')'
+  ErrChk         = False
+  Sql            = ''
+  VersionDate    = 'Sat Jan 31 01:01:20 CST 2015'
+  Version        = '2.20'
+  Filter         = ''
+  Colsep         = '!~!'
+  Sqlplus        = environ['ORACLE_HOME'] + '/bin/sqlplus'
+  ArgParser      = OptionParser()
+  Now            = datetime.now()
+  FileList       = []
+  DgDict         = {}
+  DbDict         = {}
+  TypeDict     = {}
+  TypeDict       = {}
+  FileDict       = {}
+  PickleFile     = '/tmp/' + Cmd + '.pkl'
+
+  setlocale(LC_ALL, 'en_US')
+
+  ArgParser.add_option("-a", dest="AllFiles",  default=False,           action="store_true", help="All files report")
+  ArgParser.add_option("-d", dest="DbRpt",     default=False,           action="store_true", help="Database report")
+  ArgParser.add_option("-f", dest="DbFilter",  default='',    type=str,                      help="Database filter (case sensitive)")
+  ArgParser.add_option("-g", dest="DgRpt",     default=False,           action="store_true", help="Diskgroup report")
+  ArgParser.add_option("-r", dest="Replay",    default=False,           action="store_true", help="Replay using picked results")
+  ArgParser.add_option("-s", dest="Show",      default=False,           action="store_true", help="print SQL query")
+  ArgParser.add_option("-t", dest="TypeRpt",   default=False,           action="store_true", help="File type report")
+  ArgParser.add_option("-v", dest="Version",   default=False,           action="store_true", help="print version info")
+
+  Options, args = ArgParser.parse_args()
+  argc = len(args)
+
+  if (argc > 0):
+    Filter = args[argc-1].lower()
+
+  if (Options.Version):
+    Banner = CmdDesc + ', Release ' + Version + ' Production, ' + VersionDate
+    print Banner
+    exit()
+
+  AllFiles  = Options.AllFiles
+  DbFilter  = Options.DbFilter
+  DbRpt     = Options.DbRpt
+  DgRpt     = Options.DgRpt
+  TypeRpt   = Options.TypeRpt
+  Replay    = Options.Replay
+  Show      = Options.Show
+
+  # Set the default report to Disk Group Report
+  if (DbRpt == False and DgRpt == False and TypeRpt == False and AllFiles == False):
+    DgRpt = True
+
+  if (Replay == True):
+    if (isfile(PickleFile) == True):
+      try:
+        hPickleFile = open(PickleFile,'rb')
+      except:
+         print 'Cannot open the replay file for read:', PickleFile
+         exit(1)
+      try:
+        FileList = load(hPickleFile)
+      except:
+         print 'Cannot parse the replay file:', PickleFile
+         exit(1)
+    else:
+      print 'No replay file found:', PickleFile
+      exit(1)
+  else:
+    Sql += "set feedback off\n"
+    Sql += "set echo     off\n"
+    Sql += "set timing   off\n"
+    Sql += "set heading  off\n"
+    Sql += "set pagesize 0\n"
+    Sql += "set linesize 2000\n"
+    Sql += "\n"
+    Sql += "SELECT CONCAT('+' || disk_group_name, SYS_CONNECT_BY_PATH(alias_name, '/')) ||'" + Colsep + "'||\n"
+    Sql += "       bytes                                                                ||'" + Colsep + "'||\n"
+    Sql += "       space                                                                ||'" + Colsep + "'||\n"
+    Sql += "       NVL(type, '<DIRECTORY>')                                             ||'" + Colsep + "'||\n"
+    Sql += "       creation_date                                                        ||'" + Colsep + "'||\n"
+    Sql += "       creation_time                                                        ||'" + Colsep + "'||\n"
+    Sql += "       modification_date                                                    ||'" + Colsep + "'||\n"
+    Sql += "       modification_time                                                    ||'" + Colsep + "'||\n"
+    Sql += "       disk_group_name                                                      ||'" + Colsep + "'||\n"
+    Sql += "       system_created\n"
+    Sql += "  FROM (SELECT g.name                                     disk_group_name,\n"
+    Sql += "               a.parent_index                             pindex,\n"
+    Sql += "               a.name                                     alias_name,\n"
+    Sql += "               a.reference_index                          rindex,\n"
+    Sql += "               a.system_created                           system_created,\n"
+    Sql += "               f.bytes                                    bytes,\n"
+    Sql += "               f.space                                    space,\n"
+    Sql += "               f.type                                     type,\n"
+    Sql += "               TO_CHAR(f.creation_date, 'YYYY-MM-DD')     creation_date,\n"
+    Sql += "               TO_CHAR(f.creation_date, 'HH24:MI:SS')     creation_time,\n"
+    Sql += "               TO_CHAR(f.modification_date, 'YYYY-MM-DD') modification_date,\n"
+    Sql += "               TO_CHAR(f.modification_date, 'HH24:MI:SS') modification_time\n"
+    Sql += "          FROM v$asm_file  f,\n"
+    Sql += "               v$asm_alias a,\n"
+    Sql += "               v$asm_diskgroup g\n"
+    Sql += "         WHERE (f.group_number(+) = a.group_number and f.file_number(+) = a.file_number)\n"
+    Sql += "           AND g.group_number(+)  = f.group_number\n"
+    Sql += "       )\n"
+    Sql += " WHERE type IS NOT NULL\n"
+    Sql += " START WITH (MOD(pindex, POWER(2, 24))) = 0 CONNECT BY PRIOR rindex = pindex;"
+
+    ### # If performance becomes an issue then use this query to filter by database.
+    ### # ---------------------------------------------------------------------------
+    ### Sql += "set feedback off\n"
+    ### Sql += "set echo     off\n"
+    ### Sql += "set timing   off\n"
+    ### Sql += "set heading  off\n"
+    ### Sql += "set pagesize 0\n"
+    ### Sql += "set linesize 2000\n"
+    ### Sql += "\n"
+    ### Sql += "SELECT CONCAT('+' || rpt.diskgroup_name, rpt.filename) ||'!~!'||\n"
+    ### Sql += "       rpt.bytes                                       ||'!~!'||\n"
+    ### Sql += "       rpt.space                                       ||'!~!'||\n"
+    ### Sql += "       NVL(rpt.type, '<DIRECTORY>')                    ||'!~!'||\n"
+    ### Sql += "       rpt.creation_date                               ||'!~!'||\n"
+    ### Sql += "       rpt.creation_time                               ||'!~!'||\n"
+    ### Sql += "       rpt.modification_date                           ||'!~!'||\n"
+    ### Sql += "       rpt.modification_time                           ||'!~!'||\n"
+    ### Sql += "       rpt.diskgroup_name                              ||'!~!'||\n"
+    ### Sql += "       rpt.system_created\n"
+    ### Sql += "  FROM (SELECT dtl.diskgroup_name,\n"
+    ### Sql += "               SYS_CONNECT_BY_PATH(dtl.alias_name, '/') filename,\n"
+    ### Sql += "               dtl.bytes,\n"
+    ### Sql += "               dtl.space,\n"
+    ### Sql += "               NVL(dtl.type, '<DIRECTORY>') type,\n"
+    ### Sql += "               dtl.creation_date,\n"
+    ### Sql += "               dtl.creation_time,\n"
+    ### Sql += "               dtl.modification_date,\n"
+    ### Sql += "               dtl.modification_time,\n"
+    ### Sql += "               -- dtl.diskgroup_name,\n"
+    ### Sql += "               dtl.system_created\n"
+    ### Sql += "          FROM (SELECT g.name                                     diskgroup_name,\n"
+    ### Sql += "                       a.parent_index                             pindex,\n"
+    ### Sql += "                       a.name                                     alias_name,\n"
+    ### Sql += "                       a.reference_index                          rindex,\n"
+    ### Sql += "                       a.system_created                           system_created,\n"
+    ### Sql += "                       f.bytes                                    bytes,\n"
+    ### Sql += "                       f.space                                    space,\n"
+    ### Sql += "                       f.type                                     type,\n"
+    ### Sql += "                       TO_CHAR(f.creation_date, 'YYYY-MM-DD')     creation_date,\n"
+    ### Sql += "                       TO_CHAR(f.creation_date, 'HH24:MI:SS')     creation_time,\n"
+    ### Sql += "                       TO_CHAR(f.modification_date, 'YYYY-MM-DD') modification_date,\n"
+    ### Sql += "                       TO_CHAR(f.modification_date, 'HH24:MI:SS') modification_time\n"
+    ### Sql += "                  FROM v$asm_file  f,\n"
+    ### Sql += "                       v$asm_alias a,\n"
+    ### Sql += "                       v$asm_diskgroup g\n"
+    ### Sql += "                 WHERE (f.group_number(+) = a.group_number and f.file_number(+) = a.file_number)\n"
+    ### Sql += "                   AND g.group_number(+)  = f.group_number\n"
+    ### Sql += "               ) dtl\n"
+    ### Sql += "         WHERE type IS NOT NULL\n"
+    ### Sql += "         START WITH (MOD(pindex, POWER(2, 24))) = 0 CONNECT BY PRIOR rindex = pindex\n"
+    ### Sql += "       ) rpt\n"
+    ###
+    ### if (DbFilter != ''):
+    ###   Sql += " WHERE rpt.filename like '" + '/' + DbFilter + "/%';"
+    ### else:
+    ###   Sql += ';'
+
+    if(Show == True):
+      print '-----------cut-----------cut-----------cut-----------cut-----------cut-----------'
+      print Sql
+      print '-----------cut-----------cut-----------cut-----------cut-----------cut-----------'
+      exit()
+
+    (Stdout) = RunSqlplus(Sql)
+    Stdout = Stdout.strip()
+
+    if (Stdout == ''):
+      print '\nNo ASM files found.'
+      exit()
+
+    for fileinfo in Stdout.split('\n'):
+      try:
+        #+DATA/DBM/DATAFILE/RMAN_CATALOG.1308.817853599!~!15736832!~!33554432!~!DATAFILE!~!2013-06-11!~!21:33:18!~!2013-06-11!~!21:33:18!~!DATA!~!Y
+        Filepath  = fileinfo.split(Colsep)[0]
+        Database  = Filepath.split('/')[1]
+        SizBytes  = int(fileinfo.split(Colsep)[1])
+        StoBytes  = int(fileinfo.split(Colsep)[2])
+        FileType  = fileinfo.split(Colsep)[3]
+        CrtDate   = fileinfo.split(Colsep)[4]
+        CrtTime   = fileinfo.split(Colsep)[5]
+        ModDate   = fileinfo.split(Colsep)[6]
+        ModTime   = fileinfo.split(Colsep)[7]
+        Diskgroup = fileinfo.split(Colsep)[8]
+        CrtSys    = fileinfo.split(Colsep)[9]
+      except:
+        print Stdout
+        print
+        print 'Invalid record format.'
+        exit(1)
+
+      # File List
+      # ----------------------
+      FileList.append([Diskgroup, Database, Filepath, SizBytes, StoBytes, FileType, CrtDate, CrtTime, ModDate, ModTime, CrtSys])
+
+  # Save Replay Information
+  # --------------------------
+  try:
+    hPickleFile = open(PickleFile,'wb')
+  except:
+     print 'Cannot open the replay file for write:', PickleFile
+  dump(FileList, hPickleFile)
+  hPickleFile.close()
+
+  for Filespec in FileList:
+    Diskgroup = Filespec[0]
+    Database  = Filespec[1]
+    Filepath  = Filespec[2]
+    SizBytes  = Filespec[3]
+    StoBytes  = Filespec[4]
+    FileType  = Filespec[5]
+    CrtDate   = Filespec[6]
+    CrtTime   = Filespec[7]
+    ModDate   = Filespec[8]
+    ModTime   = Filespec[9]
+    CrtSys    = Filespec[10]
+
+    # File dictionary
+    # ----------------------
+    FileDict[Filepath] = {
+      'Diskgroup' : Diskgroup,
+      'Database'  : Database,
+      'SizBytes'  : SizBytes,
+      'StoBytes'  : StoBytes,
+      'FileType'  : FileType,
+      'CrtDate'   : CrtDate,
+      'CrtTime'   : CrtTime,
+      'ModDate'   : ModDate,
+      'ModTime'   : ModTime,
+      'CrtSys'    : CrtSys
+    }
+
+    # Database dictionary
+    # ----------------------
+    if Database in DbDict:
+      if Diskgroup in DbDict[Database]:
+        DbDict[Database][Diskgroup]['TotSizBytes'] = DbDict[Database][Diskgroup]['TotSizBytes'] + SizBytes
+        DbDict[Database][Diskgroup]['TotStoBytes'] = DbDict[Database][Diskgroup]['TotStoBytes'] + StoBytes
+      else:
+        DbDict[Database][Diskgroup] = {}
+        DbDict[Database][Diskgroup]['TotSizBytes'] = SizBytes
+        DbDict[Database][Diskgroup]['TotStoBytes'] = StoBytes
+    else:
+      DbDict[Database] = {}
+      DbDict[Database][Diskgroup] = {'TotSizBytes':SizBytes, 'TotStoBytes':StoBytes}
+
+    # Diskgroup dictionary
+    # ----------------------
+    if Diskgroup in DgDict:
+      if Database in DgDict[Diskgroup]:
+        DgDict[Diskgroup][Database]['TotSizBytes'] = DgDict[Diskgroup][Database]['TotSizBytes'] + SizBytes
+        DgDict[Diskgroup][Database]['TotStoBytes'] = DgDict[Diskgroup][Database]['TotStoBytes'] + StoBytes
+      else:
+        DgDict[Diskgroup][Database] = {}
+        DgDict[Diskgroup][Database]['TotSizBytes'] = SizBytes
+        DgDict[Diskgroup][Database]['TotStoBytes'] = StoBytes
+    else:
+      DgDict[Diskgroup] = {}
+      DgDict[Diskgroup][Database] = {'TotSizBytes':SizBytes, 'TotStoBytes':StoBytes}
+
+    # TypeDict dictionary
+    # ----------------------
+    if FileType in TypeDict:
+      if Diskgroup in TypeDict[FileType]:
+        if Database in TypeDict[FileType][Diskgroup]:
+          TypeDict[FileType][Diskgroup][Database]['TotSizBytes'] += SizBytes
+          TypeDict[FileType][Diskgroup][Database]['TotStoBytes'] += StoBytes        
+        else:                            
+          TypeDict[FileType][Diskgroup][Database] = {}
+          TypeDict[FileType][Diskgroup][Database]['TotSizBytes'] = SizBytes
+          TypeDict[FileType][Diskgroup][Database]['TotStoBytes'] = StoBytes
+      else:
+        TypeDict[FileType][Diskgroup] = {}
+        TypeDict[FileType][Diskgroup][Database] = {}
+        TypeDict[FileType][Diskgroup][Database]['TotSizBytes'] = SizBytes
+        TypeDict[FileType][Diskgroup][Database]['TotStoBytes'] = StoBytes
+    else:
+      TypeDict[FileType] = {}
+      TypeDict[FileType][Diskgroup] = {}
+      TypeDict[FileType][Diskgroup][Database] = {}
+      TypeDict[FileType][Diskgroup][Database]['TotSizBytes'] = SizBytes
+      TypeDict[FileType][Diskgroup][Database]['TotStoBytes'] = StoBytes
+
+  # ----------------------
+  # Print Reports
+  # ----------------------
+
+  # Print File Report
+  # ----------------------
+  if (AllFiles == True):
+    print
+    print "File Name Report"
+    print "=================="
+    print
+    print "Filename                                                                                                   Modification Time           Size (bytes)      Storage (bytes)"
+    print "---------------------------------------------------------------------------------------------------------- ------------------- -------------------- --------------------"
+    for FileKey in sorted(FileDict.keys()):
+      Diskgroup = FileDict[FileKey]['Diskgroup']
+      Database  = FileDict[FileKey]['Database' ]
+      SizBytes  = FileDict[FileKey]['SizBytes' ]
+      StoBytes  = FileDict[FileKey]['StoBytes' ]
+      FileType  = FileDict[FileKey]['FileType' ]
+      CrtDate   = FileDict[FileKey]['CrtDate'  ]
+      CrtTime   = FileDict[FileKey]['CrtTime'  ]
+      ModDate   = FileDict[FileKey]['ModDate'  ]
+      ModTime   = FileDict[FileKey]['ModTime'  ]
+      CrtSys    = FileDict[FileKey]['CrtSys'   ]
+      SizBytes  = SplitThousands(SizBytes)
+      StoBytes  = SplitThousands(StoBytes)
+      if (DbFilter == ''):
+        print "%-106s %-10s %-8s %20s %20s" % (FileKey, ModDate, ModTime, SizBytes, StoBytes)
+      else:
+        if (DbFilter == Database):
+          print "%-106s %-10s %-8s %20s %20s" % (FileKey, ModDate, ModTime, SizBytes, StoBytes)
+
+  # Print Database Report
+  # -----------------------
+  if (DbRpt == True):
+    print
+    print "Database Report"
+    print "=================="
+    print
+    print "Database                  Total Size   Total Storage"
+    print "-------------------- --------------- ---------------"
+    for DbKey in sorted(DbDict.keys()):
+      TotalSize    = 0
+      TotalStorage = 0
+      for DgKey in sorted(DbDict[DbKey].keys()):
+        TotalSize    += DbDict[DbKey][DgKey]['TotSizBytes']
+        TotalStorage += DbDict[DbKey][DgKey]['TotStoBytes']
+       
+      prtTotalSize    = ConvertSize(TotalSize)   
+      prtTotalStorage = ConvertSize(TotalStorage)
+      if (DbFilter != ''):           
+        if (DbKey == DbFilter):
+          print "%-20s %15s %15s" % (DbKey, prtTotalSize, prtTotalStorage)
+      else:
+        print "%-20s %15s %15s" % (DbKey, prtTotalSize, prtTotalStorage)
+
+  # Print Diskgroup Report
+  # -----------------------
+  if (DgRpt == True):
+    print
+    print "Diskgroup Report"
+    print "=================="
+    print
+    print "Diskgroup    Database                  Total Size   Total Storage"
+    print "------------ -------------------- --------------- ---------------"
+    for DgKey in sorted(DgDict.keys()):
+      for DbKey in sorted(DgDict[DgKey].keys()):
+        if (DbFilter != ''):
+          if (DbKey == DbFilter):
+            prtTotalSizBytes = ConvertSize(DgDict[DgKey][DbKey]['TotSizBytes'])
+            prtTotalStorage  = ConvertSize(DgDict[DgKey][DbKey]['TotStoBytes'])
+            print "%-12s %-20s %15s %15s" % (DgKey, DbKey, prtTotalSizBytes, prtTotalStorage)
+        else:
+            prtTotalSizBytes = ConvertSize(DgDict[DgKey][DbKey]['TotSizBytes'])
+            prtTotalStorage  = ConvertSize(DgDict[DgKey][DbKey]['TotStoBytes'])
+            print "%-12s %-20s %15s %15s" % (DgKey, DbKey, prtTotalSizBytes, prtTotalStorage)
+
+  # Print File Type Report
+  # -----------------------
+  if (TypeRpt == True):
+    print
+    print "File Type Report"
+    print "=================="
+    print
+    print "File Type                      Total Size   Total Storage"
+    print "------------------------- --------------- ---------------"
+    for TypeKey in sorted(TypeDict.keys()):
+      TotalSize    = 0
+      TotalStorage = 0
+      for DgKey in sorted(TypeDict[TypeKey].keys()):
+        for DbKey in sorted(TypeDict[TypeKey][DgKey].keys()):
+          if (DbFilter != ''):
+            if (DbKey == DbFilter):
+              TotalSize    += TypeDict[TypeKey][DgKey][DbKey]['TotSizBytes']
+              TotalStorage += TypeDict[TypeKey][DgKey][DbKey]['TotStoBytes']
+          else:  
+            TotalSize    += TypeDict[TypeKey][DgKey][DbKey]['TotSizBytes']
+            TotalStorage += TypeDict[TypeKey][DgKey][DbKey]['TotStoBytes']
+  
+      if (TotalSize > 0 or TotalStorage > 0):
+        prtTotalSize    = ConvertSize(TotalSize)   
+        prtTotalStorage = ConvertSize(TotalStorage)
+        print "%-25s %15s %15s" % (TypeKey, prtTotalSize, prtTotalStorage)
+
+    print
+    print "File Type                 Diskgroup       Total Size   Total Storage"
+    print "------------------------- ---------- --------------- ---------------"
+    for TypeKey in sorted(TypeDict.keys()):
+      for DgKey in sorted(TypeDict[TypeKey].keys()):
+        TotalSize    = 0
+        TotalStorage = 0
+        for DbKey in sorted(TypeDict[TypeKey][DgKey].keys()):
+          if (DbFilter != ''):
+            if (DbKey == DbFilter):
+              TotalSize    += TypeDict[TypeKey][DgKey][DbKey]['TotSizBytes']
+              TotalStorage += TypeDict[TypeKey][DgKey][DbKey]['TotStoBytes']
+          else:  
+            TotalSize    += TypeDict[TypeKey][DgKey][DbKey]['TotSizBytes']
+            TotalStorage += TypeDict[TypeKey][DgKey][DbKey]['TotStoBytes']
+  
+        if (TotalSize > 0 or TotalStorage > 0):
+          prtTotalSize    = ConvertSize(TotalSize)   
+          prtTotalStorage = ConvertSize(TotalStorage)
+          print "%-25s %-10s %15s %15s" % (TypeKey, DgKey, prtTotalSize, prtTotalStorage)
+
+  exit(0)
+
+# --------------------------------------
+# ---- End Main Program ----------------
+# --------------------------------------
+
