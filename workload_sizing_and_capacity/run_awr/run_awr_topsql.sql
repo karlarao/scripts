@@ -41,6 +41,7 @@ col dur                 format 990.00           heading -- "Snap|Dur|(m)"
 col sql_id              format a15              heading -- "SQL|ID"
 col phv                 format 99999999999      heading -- "Plan|Hash|Value"
 col module              format a50
+col action              format a50
 col elap                format 999990.00        heading -- "Ela|Time|(s)"
 col elapexec            format 999990.00        heading -- "Ela|Time|per|exec|(s)"
 col cput                format 999990.00        heading -- "CPU|Time|(s)"
@@ -64,10 +65,11 @@ col pctdbt              format 990              heading -- "DB Time|%"
 col aas                 format 990.00           heading -- "A|A|S"
 col time_rank           format 90               heading -- "Time|Rank"
 col sql_text            format a6               heading -- "SQL|Text"
+col fms                 format 99999999999999999999999999
 
 VARIABLE  g_retention  NUMBER
 DEFINE    p_default = 8
-DEFINE    p_max = 100
+DEFINE    p_max = 300
 SET VERIFY OFF
 DECLARE
   v_default  NUMBER(3) := &p_default;
@@ -121,11 +123,13 @@ spool awr_topsqlx-tableau-exa-&_instname-&_hostname..csv
                   sqt.time_rank time_rank,
                   sqt.sql_id sql_id,
                   sqt.phv phv,
+                  sqt.fms fms,
                   sqt.parse_schema parse_schema,
                   substr(to_clob(decode(sqt.module, null, null, sqt.module)),1,50) module,
+                  substr(to_clob(decode(sqt.action, null, null, sqt.action)),1,50) action,
                   st.sql_text sql_text     -- PUT/REMOVE COMMENT TO HIDE/SHOW THE SQL_TEXT
              from        (
-                          select snap_id, tm, inst, dur, sql_id, phv, parse_schema, module, elap, elapexec, cput, iowait, appwait, concurwait, clwait, bget, dskr, dpath, rowp, exec, prsc, pxexec, icbytes, offloadbytes, offloadreturnbytes, flashcachereads, uncompbytes, aas, time_rank
+                          select snap_id, tm, inst, dur, sql_id, phv, fms, parse_schema, module, action, elap, elapexec, cput, iowait, appwait, concurwait, clwait, bget, dskr, dpath, rowp, exec, prsc, pxexec, icbytes, offloadbytes, offloadreturnbytes, flashcachereads, uncompbytes, aas, time_rank
                           from
                                              (
                                                select
@@ -138,8 +142,10 @@ spool awr_topsqlx-tableau-exa-&_instname-&_hostname..csv
                                                               + EXTRACT(SECOND FROM s1.END_INTERVAL_TIME - s0.END_INTERVAL_TIME) / 60, 2) dur,
                                                       e.sql_id sql_id,
                                                       e.plan_hash_value phv,
+                                                      e.force_matching_signature fms,
                                                       e.parsing_schema_name parse_schema,
                                                       max(e.module) module,
+                                                      max(e.action) action,
                                                       sum(e.elapsed_time_delta)/1000000 elap,
                                                       decode((sum(e.executions_delta)), 0, to_number(null), ((sum(e.elapsed_time_delta)) / (sum(e.executions_delta)) / 1000000)) elapexec,
                                                       sum(e.cpu_time_delta)/1000000     cput,
@@ -179,7 +185,7 @@ spool awr_topsqlx-tableau-exa-&_instname-&_hostname..csv
                                                     AND s1.snap_id            = s0.snap_id + 1
                                                     and e.snap_id             = s0.snap_id + 1
                                                group by
-                                                    s0.snap_id, s0.END_INTERVAL_TIME, s0.instance_number, e.sql_id, e.plan_hash_value, e.parsing_schema_name, e.elapsed_time_delta, s1.END_INTERVAL_TIME - s0.END_INTERVAL_TIME
+                                                    s0.snap_id, s0.END_INTERVAL_TIME, s0.instance_number, e.sql_id, e.plan_hash_value, e.force_matching_signature, e.parsing_schema_name, e.elapsed_time_delta, s1.END_INTERVAL_TIME - s0.END_INTERVAL_TIME
                                              )
                           where
                           time_rank <= 5                                     -- GET TOP 5 SQL ACROSS SNAP_IDs... YOU CAN ALTER THIS TO HAVE MORE DATA POINTS

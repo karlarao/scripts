@@ -1,0 +1,6 @@
+
+> IO sysmetric latency 
+> GC waits
+> redo MB/s for data guard network requirement
+
+> standardized tableau dashboard, show similar pages as AWR miner 

@@ -14,7 +14,7 @@ SELECT 'get_dbid', TO_CHAR(dbid) ecr_dbid FROM v$database;
 COL ecr_min_snap_id NEW_V ecr_min_snap_id;
 SELECT 'get_min_snap_id', TO_CHAR(MIN(snap_id)) ecr_min_snap_id 
 FROM dba_hist_snapshot WHERE dbid = &&ecr_dbid. 
-and to_date(to_char(END_INTERVAL_TIME,'MM/DD/YY HH24:MI:SS'),'MM/DD/YY HH24:MI:SS') > sysdate - 100;
+and to_date(to_char(END_INTERVAL_TIME,'MM/DD/YY HH24:MI:SS'),'MM/DD/YY HH24:MI:SS') > sysdate - 300;
 COL ecr_collection_host NEW_V ecr_collection_host;
 SELECT 'get_collection_host', LOWER(SUBSTR(SYS_CONTEXT('USERENV', 'SERVER_HOST')||'.', 1, INSTR(SYS_CONTEXT('USERENV', 'SERVER_HOST')||'.', '.') - 1)) ecr_collection_host FROM DUAL
 /
@@ -143,6 +143,6 @@ SELECT '&&ecr_collection_host.', '&&ecr_collection_key', 'nw_perf_ts', 'nw_dl_by
 
 spool off
 host sed -n -i '2,$ p' awr_netclient-tableau-&_instname-&_hostname..csv
-host gzip -v awr_netclient-tableau-&_instname-&_hostname..csv
-host tar -cvf awr_netclient-tableau-&_instname-&_hostname..tar awr_netclient-tableau-&_instname-&_hostname..csv.gz
-host rm awr_netclient-tableau-&_instname-&_hostname..csv.gz
+-- host gzip -v awr_netclient-tableau-&_instname-&_hostname..csv
+-- host tar -cvf awr_netclient-tableau-&_instname-&_hostname..tar awr_netclient-tableau-&_instname-&_hostname..csv.gz
+-- host rm awr_netclient-tableau-&_instname-&_hostname..csv.gz

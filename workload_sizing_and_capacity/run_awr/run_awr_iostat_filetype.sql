@@ -39,7 +39,7 @@ col dur         format 999990.00        heading dur          --"Snap|Dur|(m)"
 
 VARIABLE  g_retention  NUMBER
 DEFINE    p_default = 8
-DEFINE    p_max = 100
+DEFINE    p_max = 300
 SET VERIFY OFF
 DECLARE
   v_default  NUMBER(3) := &p_default;

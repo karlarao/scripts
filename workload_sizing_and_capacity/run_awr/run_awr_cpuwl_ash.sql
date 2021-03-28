@@ -2,7 +2,7 @@
 -- this section is from https://github.com/carlos-sierra/esp_collect
 
 
-DEF MAX_DAYS = '365';
+DEF MAX_DAYS = '300';
 SET TERM OFF ECHO OFF FEED OFF VER OFF HEA OFF PAGES 0 COLSEP ', ' LIN 32767 TRIMS ON TRIM ON TI OFF TIMI OFF ARRAY 100 NUM 20 SQLBL ON BLO . RECSEP OFF;
 
 -- get host name (up to 30, stop before first '.', no special characters)
@@ -115,7 +115,7 @@ SELECT /*+ &&ecr_sq_fact_hints. */
    AND s.dbid = h.dbid
    AND s.instance_number = h.instance_number
    --AND CAST(s.begin_interval_time AS DATE) > SYSDATE - &&collection_days.
-   AND s.begin_interval_time between SYSDATE-100 and SYSDATE 
+   AND s.begin_interval_time between SYSDATE-300 and SYSDATE 
  GROUP BY
        h.instance_number,
        h.snap_id,

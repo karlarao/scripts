@@ -26,10 +26,33 @@ COLUMN instancenumber NEW_VALUE _instancenumber NOPRINT
 select instance_number instancenumber from v$instance;
 
 -- ttitle center 'AWR Top Segments' skip 2
+col snap_id     format 99999
+col tm          format a17
 set pagesize 50000
-set linesize 1000
 
-spool awr_topsegments-tableau-&_instname-&_hostname..csv
+VARIABLE  g_retention  NUMBER
+DEFINE    p_default = 8
+DEFINE    p_max = 300
+SET VERIFY OFF
+DECLARE
+  v_default  NUMBER(3) := &p_default;
+  v_max      NUMBER(3) := &p_max;
+BEGIN
+  select
+    ((TRUNC(SYSDATE) + RETENTION - TRUNC(SYSDATE)) * 86400)/60/60/24 AS RETENTION_DAYS
+    into :g_retention
+  from dba_hist_wr_control
+  where dbid in (select dbid from v$database);
+
+  if :g_retention > v_default then
+    :g_retention := v_max;
+  else
+    :g_retention := v_default;
+  end if;
+END;
+/
+
+spool awr_topsegments-space-used-tableau-&_instname-&_hostname..csv
 SELECT
   trim('&_instname') instname,
   trim('&_dbid') db_id,
@@ -102,7 +125,7 @@ FROM
           r.PHYSICAL_READ_REQUESTS_DELTA,
           r.PHYSICAL_WRITE_REQUESTS_DELTA,
           r.OPTIMIZED_PHYSICAL_READS_DELTA,
-          DENSE_RANK() OVER (PARTITION BY r.snap_id ORDER BY r.PHYSICAL_READS_DELTA + r.PHYSICAL_WRITES_DELTA DESC) seg_rank
+          DENSE_RANK() OVER (PARTITION BY r.snap_id ORDER BY r.SPACE_USED_DELTA DESC) seg_rank
         FROM
               dba_hist_seg_stat_obj n,
               (
@@ -147,15 +170,15 @@ FROM
                     AND b.instance_number    = s0.instance_number
                     AND s1.snap_id           = s0.snap_id + 1
                     AND b.snap_id            = s0.snap_id + 1
-                    --AND s0.snap_id = 35547
+                    AND s0.END_INTERVAL_TIME > sysdate - :g_retention
                 GROUP BY
                   s0.snap_id, s0.END_INTERVAL_TIME, s0.instance_number, b.dataobj#, b.obj#, b.dbid
               ) r
         WHERE n.dataobj#     = r.dataobj#
         AND n.obj#           = r.obj#
         AND n.dbid           = r.dbid
-        AND r.PHYSICAL_READS_DELTA + r.PHYSICAL_WRITES_DELTA > 0
-        ORDER BY physical_rw DESC,
+        AND r.SPACE_USED_DELTA > 0
+        ORDER BY r.SPACE_USED_DELTA DESC,
           object_name,
           owner,
           subobject_name
@@ -164,7 +187,7 @@ WHERE
 seg_rank <=5
 order by inst, snap_id, seg_rank asc;
 spool off
-host sed -n -i '2,$ p' awr_topsegments-tableau-&_instname-&_hostname..csv
--- host gzip -v awr_topsegments-tableau-&_instname-&_hostname..csv
--- host tar -cvf awr_topsegments-tableau-&_instname-&_hostname..tar awr_topsegments-tableau-&_instname-&_hostname..csv.gz
--- host rm awr_topsegments-tableau-&_instname-&_hostname..csv.gz
+host sed -n -i '2,$ p' awr_topsegments-space-used-tableau-&_instname-&_hostname..csv
+-- host gzip -v awr_topsegments-space-used-tableau-&_instname-&_hostname..csv
+-- host tar -cvf awr_topsegments-space-used-tableau-&_instname-&_hostname..tar awr_topsegments-space-used-tableau-&_instname-&_hostname..csv.gz
+-- host rm awr_topsegments-space-used-tableau-&_instname-&_hostname..csv.gz
