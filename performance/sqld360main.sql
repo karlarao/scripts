@@ -161,9 +161,6 @@ select '@planx Y ' ||operation from plan_table;
 -- -- gluent
 -- select '@gluent_sqlmon.sql sql_id=' ||operation from plan_table;
 
-select '@planx_hist Y ' ||operation from plan_table;
-
-
 select '@sqlhc.sql T ' ||operation from plan_table;
 
 
