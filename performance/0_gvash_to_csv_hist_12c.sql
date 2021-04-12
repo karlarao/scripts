@@ -1,13 +1,15 @@
 -- How to dump raw Active Session History Data into a spreadsheet (Doc ID 1630717.1)
--- gvash_to_csv.sql : modified by Karl Arao 
+-- gvash_to_csv_hist.sql : modified by Karl Arao 
+-- DataRange1: SYSDATE-2 
+-- DataRange2: SYSDATE
+
+define _start_time='05/10/2017 15:00'
+define _end_time='05/10/2017 16:00'
 
 set feedback off pages 0 term off head on und off trimspool on 
 set arraysize 5000
 set termout off
 set echo off verify off
-
-COLUMN name NEW_VALUE _instname NOPRINT
-select lower(instance_name) name from v$instance;
 
 column INSTNAME format a20
 column DELTA_WRITE_IO_BYTES format a24
@@ -100,6 +102,7 @@ column SESSION_TYPE format a12
 column SESSION_SERIAL# format a24
 column SESSION_ID format a24
 column TM format a13
+column TMS format a13
 column SAMPLE_TIME format a13
 column SAMPLE_ID format a24
 column INSTANCE_NUMBER format a24
@@ -108,15 +111,27 @@ column SNAP_ID format a24
 column TEMP_SPACE_ALLOCATED format a24
 column PGA_ALLOCATED format a24
 column DELTA_INTERCONNECT_IO_BYTES format a24
+column CON_ID format a4
 
+COL current_time NEW_V current_time FOR A15;
+SELECT 'current_time: ' x, TO_CHAR(SYSDATE, 'YYYYMMDD_HH24MISS') current_time FROM DUAL;
+
+COLUMN xconname NEW_VALUE _xconname NOPRINT
+select sys_context('userenv', 'con_name') xconname from dual;
+
+COLUMN name NEW_VALUE _xdbname NOPRINT
+select name from v$database;
+
+COLUMN name NEW_VALUE _instname NOPRINT
+select instance_name name from v$instance;
 
 set pages 2000
-set lines 2750
+set lines 3000
 set heading off
 set feedback off
 set echo off
 
-! echo "INSTNAME, INST_ID , SAMPLE_ID , TM, SAMPLE_TIME , SESSION_ID , SESSION_SERIAL# , SESSION_TYPE , FLAGS , USER_ID , SQL_ID ,"-
+! echo "DBNAME, CON_ID, INSTNAME, INSTANCE_NUMBER , DBID, SNAP_ID, SAMPLE_ID , TM, TMS, SAMPLE_TIME , SESSION_ID , SESSION_SERIAL# , SESSION_TYPE , FLAGS , USER_ID , SQL_ID ,"-
 "IS_SQLID_CURRENT , SQL_CHILD_NUMBER , SQL_OPCODE , SQL_OPNAME , FORCE_MATCHING_SIGNATURE , TOP_LEVEL_SQL_ID , TOP_LEVEL_SQL_OPCODE , "-
 "SQL_PLAN_HASH_VALUE , SQL_PLAN_LINE_ID , SQL_PLAN_OPERATION , SQL_PLAN_OPTIONS , SQL_EXEC_ID , SQL_EXEC_START , PLSQL_ENTRY_OBJECT_ID,"-
 "PLSQL_ENTRY_SUBPROGRAM_ID , PLSQL_OBJECT_ID , PLSQL_SUBPROGRAM_ID , QC_INSTANCE_ID , QC_SESSION_ID , QC_SESSION_SERIAL# , PX_FLAGS , EVENT ,"-
@@ -127,11 +142,11 @@ set echo off
 " IN_BIND , IN_CURSOR_CLOSE , IN_SEQUENCE_LOAD , CAPTURE_OVERHEAD , REPLAY_OVERHEAD , IS_CAPTURED , IS_REPLAYED , SERVICE_HASH , PROGRAM , MODULE ,"-
 " ACTION , CLIENT_ID , MACHINE , PORT , ECID , DBREPLAY_FILE_ID , DBREPLAY_CALL_COUNTER , TM_DELTA_TIME , TM_DELTA_CPU_TIME , TM_DELTA_DB_TIME , "-
 "DELTA_TIME , DELTA_READ_IO_REQUESTS , DELTA_WRITE_IO_REQUESTS , DELTA_READ_IO_BYTES , DELTA_WRITE_IO_BYTES , DELTA_INTERCONNECT_IO_BYTES , "-
-"PGA_ALLOCATED , TEMP_SPACE_ALLOCATED " > myash-&_instname..csv
+"PGA_ALLOCATED , TEMP_SPACE_ALLOCATED " > myash-hist-&&_xdbname-&&_instname-&&_xconname-&&current_time..csv
 
-spool myash-&_instname..csv append
+spool myash-hist-&&_xdbname-&&_instname-&&_xconname-&&current_time..csv
 
-select INSTNAME ||','|| INST_ID ||','|| SAMPLE_ID ||','|| TM ||','|| SAMPLE_TIME ||','|| SESSION_ID ||','|| SESSION_SERIAL# ||','|| -
+select '&&_xdbname-&&_instname-&&_xconname' ||','|| CON_ID ||','|| INSTNAME ||','|| INSTANCE_NUMBER ||','|| DBID ||','|| SNAP_ID ||','|| SAMPLE_ID ||','|| TM ||','|| TMS ||','|| SAMPLE_TIME ||','|| SESSION_ID ||','|| SESSION_SERIAL# ||','|| -
 SESSION_TYPE ||','|| FLAGS ||','|| USER_ID ||','|| SQL_ID ||','|| IS_SQLID_CURRENT ||','|| SQL_CHILD_NUMBER ||','|| SQL_OPCODE ||','|| SQL_OPNAME -
 ||','|| FORCE_MATCHING_SIGNATURE ||','|| TOP_LEVEL_SQL_ID ||','|| TOP_LEVEL_SQL_OPCODE ||','|| SQL_PLAN_HASH_VALUE ||','|| SQL_PLAN_LINE_ID -
 ||','|| SQL_PLAN_OPERATION ||','|| SQL_PLAN_OPTIONS ||','|| SQL_EXEC_ID ||','|| SQL_EXEC_START ||','|| PLSQL_ENTRY_OBJECT_ID ||','|| -
@@ -148,12 +163,9 @@ DBREPLAY_CALL_COUNTER ||','|| TM_DELTA_TIME ||','|| TM_DELTA_CPU_TIME ||','|| TM
 DELTA_READ_IO_REQUESTS ||','|| DELTA_WRITE_IO_REQUESTS ||','|| DELTA_READ_IO_BYTES ||','|| DELTA_WRITE_IO_BYTES ||','|| -
 DELTA_INTERCONNECT_IO_BYTES ||','|| PGA_ALLOCATED ||','|| TEMP_SPACE_ALLOCATED 
 From 
-(select trim('&_instname') INSTNAME, TO_CHAR(SAMPLE_TIME,'MM/DD/YY HH24:MI:SS') TM, a.*
-from gv$active_session_history a)
-Where SAMPLE_TIME > sysdate - 4
+(select trim('&_instname') INSTNAME, TO_CHAR(SAMPLE_TIME,'MM/DD/YY HH24:MI:SS') TM, TO_CHAR(SQL_EXEC_START, 'MM/DD/YY HH24:MI:SS') TMS, a.*
+from DBA_HIST_ACTIVE_SESS_HISTORY a)
+where sample_time between SYSDATE-10 and SYSDATE
+-- where sample_time between to_date('&_start_time', 'MM/DD/YY HH24:MI') and to_date('&_end_time', 'MM/DD/YY HH24:MI')
 Order by SAMPLE_TIME, session_id asc;
 spool off;
-
-
-
-
