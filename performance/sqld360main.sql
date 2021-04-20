@@ -152,15 +152,17 @@ END;
 
 
 
--- planx_hist                                                         
+-- planx                                                         
 set head off
 col operation format a50
 select '@planx Y ' ||operation from plan_table;
 
 
--- -- gluent
+-- gluent
 -- select '@gluent_sqlmon.sql sql_id=' ||operation from plan_table;
 
+
+-- sqlhc
 select '@sqlhc.sql T ' ||operation from plan_table;
 
 

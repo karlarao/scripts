@@ -5428,7 +5428,7 @@ SPO OFF;
  * ------------------------- */
 
 -- turing trace off
-ALTER SESSION SET SQL_TRACE = FALSE;
+-- ALTER SESSION SET SQL_TRACE = FALSE;
 --ALTER SESSION SET STATISTICS_LEVEL = 'TYPICAL';
 
 -- get udump directory path
