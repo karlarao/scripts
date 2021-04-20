@@ -21,9 +21,9 @@ SPO OFF;
 
 DEF column_number = '1';
 
---@@sqld360_1a_configuration.sql
---@@sqld360_1e_nls.sql
---@@sqld360_1f_observations.sql
+@@sqld360_1a_configuration.sql
+@@sqld360_1e_nls.sql
+@@sqld360_1f_observations.sql
 
 
 -- PRO ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -92,7 +92,7 @@ SPO OFF;
 
 -- @@&&skip_10g.&&skip_11r1.sqld360_5a_10053.sql
 @@&&skip_tuning.&&skip_10g.&&sqld360_skip_sqlmon.sqld360_5b_sqlmon.sql
--- @@&&skip_diagnostics.&&sqld360_skip_awrrpt.sqld360_5c_awr.sql
+@@&&skip_diagnostics.&&sqld360_skip_awrrpt.sqld360_5c_awr.sql
 -- @@&&skip_diagnostics.&&sqld360_skip_ashrpt.sqld360_5d_ash.sql
 -- @@&&skip_tcb.&&skip_10g.&&sqld360_skip_tcb.&&sqld360_local_exec.sqld360_5e_tcb.sql
 -- @@&&from_edb360.&&skip_diagnostics.&&sqld360_skip_rawash.sqld360_5f_rawash.sql

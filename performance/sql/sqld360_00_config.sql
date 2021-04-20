@@ -29,7 +29,7 @@ DEF sqld360_conf_incl_sqlmon = 'Y';
 DEF sqld360_conf_incl_ash_hist = 'Y';
 
 -- include/exclude AWR Reports (always off by default) 
-DEF sqld360_conf_incl_awrrpt = 'N';
+DEF sqld360_conf_incl_awrrpt = 'Y';
 
 -- include/exclude ASH SQL Reports (always off by default, very expensive and little benefit) 
 DEF sqld360_conf_incl_ashrpt = 'N';
