@@ -507,6 +507,19 @@ EXEC :E_TABLE_COL  := 10;
 
 /**************************************************************************************************/
 
+
+-- setup to produce reports
+SET ECHO OFF FEED OFF VER OFF SHOW OFF HEA OFF LIN 2000 NEWP NONE PAGES 0 LONG 2000000 LONGC 2000 SQLC MIX TAB ON TRIMS ON TI OFF TIMI OFF ARRAY 100 NUMF "" SQLP SQL> SUF sql BLO . RECSEP OFF APPI OFF AUTOT OFF;
+
+/**************************************************************************************************/
+
+COL files_prefix NEW_V files_prefix FOR A40;
+--SELECT '^^script._^^database_name_short._^^host_name_short._^^rdbms_version._^^sql_id._^^time_stamp.' files_prefix FROM DUAL;
+SELECT '^^script._^^time_stamp._^^sql_id.' files_prefix FROM DUAL;
+COL sqldx_prefix NEW_V sqldx_prefix FOR A40;
+SELECT '^^files_prefix._8_sqldx' sqldx_prefix FROM DUAL;
+
+
 /* -------------------------
  *
  * Metadata
