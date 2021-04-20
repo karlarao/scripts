@@ -157,6 +157,13 @@ set head off
 col operation format a50
 select '@planx Y ' ||operation from plan_table;
 
+
+-- sqlhc
+select '@sqlhc_metadata.sql T ' ||operation from plan_table;
+
+
+
+
 SPO OFF 
 
 
