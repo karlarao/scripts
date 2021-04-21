@@ -23,8 +23,8 @@
 --             
 ---------------------------------------------------------------------------------------
 --
-SET HEA ON LIN 500 PAGES 100 TAB OFF FEED OFF ECHO OFF VER OFF TRIMS ON TRIM ON TI OFF TIMI OFF;
-SET LIN 1000;
+CL COL;
+SET FEED OFF VER OFF HEA ON LIN 2200 PAGES 50 TIMI OFF LONG 80000 LONGC 2000 TRIMS ON AUTOT OFF;
 SET SERVEROUT OFF;
 
 PRO
@@ -45,8 +45,6 @@ BEGIN
   SELECT dbid INTO :dbid FROM v$database;
 END;
 /
--- settings to allow planx to run standalone
-SET LIN 32767 PAGES 0 LONG 32767000 LONGC 32767 TRIMS ON AUTOT OFF;
 -- display adaptive plan
 COL format_adaptive NEW_V format_adaptive
 SELECT '+ADAPTIVE' format_adaptive FROM v$instance WHERE version >= '12.';
