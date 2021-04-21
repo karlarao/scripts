@@ -1,0 +1,8 @@
+download the https://github.com/karlarao/scripts/archive/refs/heads/master.zip on a new directory
+
+run the sqld360batch_planx.sql as SYS or DBA role (https://raw.githubusercontent.com/karlarao/scripts/master/performance/sqld360batch_planx.sql)
+
+once done, package all files using sqld360batch_wrap.sh (https://raw.githubusercontent.com/karlarao/scripts/master/performance/sqld360batch_wrap.sh)
+
+then upload the dir_sqld360batch.zip file
+
