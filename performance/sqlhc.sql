@@ -56,7 +56,7 @@ REM   3. On a read-only instance, the "Observations" section with the
 REM      results of the health-checks will be missing.
 REM
 DEF health_checks = 'Y';
-DEF shared_cursor = 'N';
+DEF shared_cursor = 'Y';
 DEF sql_monitor_reports = '12';
 REM
 DEF script = 'sqlhc';
