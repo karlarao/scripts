@@ -128,7 +128,7 @@ COL x_db_name NEW_V x_db_name;
 SELECT name x_db_name FROM v$database;
 COL x_container NEW_V x_container;
 SELECT 'NONE' x_container FROM DUAL;
-SELECT SYS_CONTEXT('USERENV', 'CON_NAME') x_container FROM DUAL;
+select case when sys_context('userenv', 'con_name') like '%ROOT' then 'CDBROOT' else sys_context('userenv', 'con_name') end x_container from dual;
 DEF sql_handle = '';
 COL sql_handle NEW_V sql_handle;
 SELECT sql_handle FROM dba_sql_plan_baselines WHERE signature = &&signature. AND ROWNUM = 1;
