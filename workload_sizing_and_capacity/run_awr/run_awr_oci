@@ -1,0 +1,23 @@
+for INST in $(ps axo cmd | grep ora_pmo[n] | sed 's/^ora_pmon_//' | grep -v 'sed '); do
+        DB_NAME=$(echo "${INST:0:$(echo ${#INST}-1 | bc)}")
+        . ~oracle/${DB_NAME}.env
+
+
+sqlplus -s /nolog <<EOF
+connect / as sysdba
+
+select '~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~' from dual;
+
+
+
+select value instance_number from v\$parameter where name in ('db_unique_name');
+show pdbs
+
+@run_all_cdb.sql
+
+
+EOF
+
+
+done
+
