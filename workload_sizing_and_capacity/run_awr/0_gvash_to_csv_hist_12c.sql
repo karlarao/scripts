@@ -117,7 +117,7 @@ COL current_time NEW_V current_time FOR A15;
 SELECT 'current_time: ' x, TO_CHAR(SYSDATE, 'YYYYMMDD_HH24MISS') current_time FROM DUAL;
 
 COLUMN xconname NEW_VALUE _xconname NOPRINT
-select case when sys_context('userenv', 'con_name') like '%ROOT' then 'CDBROOT' else sys_context('userenv', 'con_name') end xconnname from dual;
+select case when sys_context('userenv', 'con_name') like '%ROOT' then 'CDBROOT' else sys_context('userenv', 'con_name') end xconname from dual;
 
 COLUMN name NEW_VALUE _xdbname NOPRINT
 select name from v$database;
