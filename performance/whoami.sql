@@ -1,6 +1,12 @@
 
 select inst_id, sid from gv$mystat where rownum < 2;
 
+select /* usercheck */ s.sid sid, s.serial# serial#, lpad(p.spid,7) unix_pid 
+from gv$process p, gv$session s
+where p.addr=s.paddr
+and   s.username is not null
+and (s.inst_id, s.sid) in (select inst_id, sid from gv$mystat where rownum < 2);
+
 
 select sys_context('userenv', 'con_name') PDB from dual;
 
