@@ -6,10 +6,13 @@
 --Execute as user with DBA role 
 -- 
 --@rwp_sqlmonreport
---Enter value for sqlmon_sqlid: <sql_id>
+--Enter SQL_ID (required)
+--Enter value for 1: <sql_id>
 
 
-DEF sqlmon_sqlid = '&&sqlmon_sqlid';
+
+PRO Enter SQL_ID (required)
+DEF sqlmon_sqlid = '&&1';
 DEF sqlmon_date_mask = 'YYYYMMDDHH24MISS';
 DEF sqlmon_text = 'Y';
 DEF sqlmon_active = 'Y';
@@ -233,9 +236,11 @@ SET TERM ON
 -- get current time
 SPO &&sqlmon_sqlid..txt APP;
 COL current_time NEW_V current_time FOR A15;
-SELECT 'Completed: ' x, TO_CHAR(SYSDATE, 'HH24:MI:SS') current_time FROM DUAL;
+SELECT 'Completed: ' x, TO_CHAR(SYSDATE, 'YYYYMMDD_HH24MISS') current_time FROM DUAL;
 SET TERM OFF
 
 
-HOST zip -jmq rwp_&&sqlmon_sqlid rwp_sqlmon_*
+
+
+HOST zip -jmq rwp_&&sqlmon_sqlid._&&current_time. rwp_sqlmon_*
   
