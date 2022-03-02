@@ -6,8 +6,6 @@
 --
 -- Author:      Carlos Sierra
 --
--- Version:     2013/10/04
---
 -- Usage:       This scripts does not have parameters. It just needs to be executed
 --              twice. First execution just before the SQL that needs to be evaluated.
 --              Second execution right after.
@@ -29,15 +27,16 @@
 --  Notes:            
 --              
 --              This script uses the global temporary plan_table as a repository.
--- 
---              Developed and tested on 11.2.0.3
 --
 --              For a more robust tool use Tanel Poder snaper at
 --              http://blog.tanelpoder.com
+--
+-- Changes:
+--              Karl Arao - added union all to v$session_event
 --             
 ---------------------------------------------------------------------------------------
 --
--- snap of v$mystat
+-- snap of v$mystat and v$session_event
 INSERT INTO plan_table (
        statement_id /* record_type */,
        timestamp, 
@@ -61,7 +60,30 @@ SELECT 'v$mystat' record_type,
        s.value
   FROM v$mystat s,
        v$statname n
- WHERE s.statistic# = n.statistic#;
+ WHERE s.statistic# = n.statistic#
+union all
+        select 
+            'v$mystat' record_type,
+            SYSDATE,
+            wait_class || ' - ' || event as class, 
+            measure, 
+            value
+        from 
+        (
+        select * from v$session_event 
+        unpivot (value for measure in (TOTAL_WAITS as 'TOTAL_WAITS', 
+                                        TOTAL_TIMEOUTS as 'TOTAL_TIMEOUTS',
+                                        TIME_WAITED as 'TIME_WAITED',
+                                        AVERAGE_WAIT as 'AVERAGE_WAIT',
+                                        MAX_WAIT as 'MAX_WAIT',
+                                        TIME_WAITED_MICRO as 'TIME_WAITED_MICRO', 
+                                        EVENT_ID as 'EVENT_ID',
+                                        WAIT_CLASS_ID as 'WAIT_CLASS_ID',
+                                        WAIT_CLASS# as 'WAIT_CLASS#'
+                                        ))
+        where sid in (select /*+ no_merge */ sid from v$mystat where rownum = 1)
+        );
+
 --
 DEF date_mask = 'YYYY-MM-DD HH24:MI:SS';
 COL snap_date_end NEW_V snap_date_end;
@@ -84,8 +106,8 @@ COL difference FOR 999,999,999,999 HEA "Difference";
 --
 -- report only if there is a begin and end snaps
 SELECT (e.cost - b.cost) difference,
-       --b.object_node||': '||b.object_alias statistics_name
-       b.object_alias statistics_name
+       b.object_node||': '||b.object_alias statistics_name
+       --b.object_alias statistics_name
   FROM plan_table b,
        plan_table e
  WHERE '&&snap_date_begin.' IS NOT NULL
@@ -94,10 +116,12 @@ SELECT (e.cost - b.cost) difference,
    AND e.statement_id = 'v$mystat'
    AND e.timestamp = TO_DATE('&&snap_date_end.', '&&date_mask.')
    AND e.object_alias = b.object_alias /* name */
+   AND e.object_node = b.object_node
    AND e.cost > b.cost /* value */ 
  ORDER BY
-       --b.object_node,
+       b.object_node,
        b.object_alias;
+
 --
 -- report snaps
 SELECT '&&snap_date_begin.' snap_date_begin,
