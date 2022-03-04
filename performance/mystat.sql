@@ -36,7 +36,7 @@
 --             
 ---------------------------------------------------------------------------------------
 --
--- snap of v$mystat and v$session_event
+-- snap of v$mystat, v$session_event, v$sess_time_model
 INSERT INTO plan_table (
        statement_id /* record_type */,
        timestamp, 
