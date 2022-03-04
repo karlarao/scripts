@@ -31,8 +31,8 @@
 --              For a more robust tool use Tanel Poder snaper at
 --              http://blog.tanelpoder.com
 --
--- Changes:
---              Karl Arao - added union all to v$session_event
+-- Contribution/s:
+--              Karl Arao - added union all to v$session_event and v$sess_time_model 
 --             
 ---------------------------------------------------------------------------------------
 --
@@ -45,7 +45,7 @@ INSERT INTO plan_table (
        cost /* value */)
 SELECT 'v$mystat' record_type,
        SYSDATE,
-       TRIM (',' FROM
+       'Mystat:' || ' ' || TRIM (',' FROM
        TRIM (' ' FROM
        DECODE(BITAND(n.class,   1),   1, 'User, ')||
        DECODE(BITAND(n.class,   2),   2, 'Redo, ')||
@@ -65,7 +65,7 @@ union all
         select 
             'v$mystat' record_type,
             SYSDATE,
-            wait_class || ' - ' || event as class, 
+            'Event:' || ' ' || wait_class || ' - ' || event as class, 
             measure, 
             value
         from 
@@ -81,6 +81,18 @@ union all
                                         WAIT_CLASS_ID as 'WAIT_CLASS_ID',
                                         WAIT_CLASS# as 'WAIT_CLASS#'
                                         ))
+        where sid in (select /*+ no_merge */ sid from v$mystat where rownum = 1)
+        )
+union all 
+        select 
+            'v$mystat' record_type,
+            SYSDATE,
+            'Time_Model' class,
+            stat_name measure, 
+            value
+        from 
+        (
+        select * from v$sess_time_model
         where sid in (select /*+ no_merge */ sid from v$mystat where rownum = 1)
         );
 
@@ -101,7 +113,7 @@ SELECT TO_CHAR(MAX(timestamp), '&&date_mask.') snap_date_begin
  WHERE statement_id = 'v$mystat'
    AND TO_CHAR(timestamp, '&&date_mask.') < '&&snap_date_end.';
 --
-COL statistics_name FOR A62 HEA "Statistics Name";
+COL statistics_name FOR A100 HEA "Statistics Name";
 COL difference FOR 999,999,999,999 HEA "Difference";
 --
 -- report only if there is a begin and end snaps
