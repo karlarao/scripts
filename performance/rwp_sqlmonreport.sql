@@ -1,4 +1,4 @@
---Extract SQL Monitor and dbms_xplan reports of a SQL_ID
+--Extract all types of SQL Monitor and DBMS_XPLAN reports of a SQL_ID
 --by Karl Arao 
 --
 --HOWTO:
