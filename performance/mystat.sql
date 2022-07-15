@@ -33,9 +33,15 @@
 --
 -- Contribution/s:
 --              Karl Arao - added union all to v$session_event and v$sess_time_model 
+--              Karl Arao - added 1 second jitter to fix 1st execution NULL diff 
 --             
 ---------------------------------------------------------------------------------------
 --
+-- 1 second jitter
+COL jitterdateval NEW_V dateval;
+select TO_CHAR(sysdate,'MM/DD/YY HH24:MI:SS') orig_dateval  from dual;
+select TO_CHAR(NVL2(max(timestamp),sysdate, sysdate - 1/86400),'MM/DD/YY HH24:MI:SS') jitterdateval  from plan_table;
+
 -- snap of v$mystat, v$session_event, v$sess_time_model
 INSERT INTO plan_table (
        statement_id /* record_type */,
@@ -44,7 +50,7 @@ INSERT INTO plan_table (
        object_alias /* name */, 
        cost /* value */)
 SELECT 'v$mystat' record_type,
-       SYSDATE,
+       to_date('&&dateval.','MM/DD/YY HH24:MI:SS'),
        'Mystat:' || ' ' || TRIM (',' FROM
        TRIM (' ' FROM
        DECODE(BITAND(n.class,   1),   1, 'User, ')||
@@ -64,7 +70,7 @@ SELECT 'v$mystat' record_type,
 union all
         select 
             'v$mystat' record_type,
-            SYSDATE,
+            to_date('&&dateval.','MM/DD/YY HH24:MI:SS'),
             'Event:' || ' ' || wait_class || ' - ' || event as class, 
             measure, 
             value
@@ -86,7 +92,7 @@ union all
 union all 
         select 
             'v$mystat' record_type,
-            SYSDATE,
+            to_date('&&dateval.','MM/DD/YY HH24:MI:SS'),
             'Time_Model' class,
             stat_name measure, 
             value
