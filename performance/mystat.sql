@@ -37,6 +37,7 @@
 --             
 ---------------------------------------------------------------------------------------
 --
+SET VER OFF PAGES 1000 LINES 500;
 -- 1 second jitter
 COL jitterdateval NEW_V dateval;
 select TO_CHAR(sysdate,'MM/DD/YY HH24:MI:SS') orig_dateval  from dual;
@@ -106,7 +107,6 @@ union all
 DEF date_mask = 'YYYY-MM-DD HH24:MI:SS';
 COL snap_date_end NEW_V snap_date_end;
 COL snap_date_begin NEW_V snap_date_begin;
-SET VER OFF PAGES 1000;
 --
 -- end snap
 SELECT TO_CHAR(MAX(timestamp), '&&date_mask.') snap_date_end
