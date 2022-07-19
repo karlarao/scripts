@@ -12,7 +12,10 @@
 --
 -- Example:     @mystat.sql
 --              <any sql>
---              @mystat.sql             
+--              @mystat.sql
+--
+-- Save the output to a file and do a diff on the first 40 characters
+--   diff -y <(cut -c1-40 run1.txt) <(cut -c1-40 run2.txt) | less             
 --
 -- Description:
 --
