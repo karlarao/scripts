@@ -124,7 +124,7 @@ COL difference FOR 999,999,999,999 HEA "Difference";
 --
 -- report only if there is a begin and end snaps
 SELECT b.object_node||': '||b.object_alias statistics_name,
-       (e.cost - b.cost) difference
+        (e.cost - b.cost) difference
   FROM plan_table b,
        plan_table e
  WHERE '&&snap_date_begin.' IS NOT NULL
