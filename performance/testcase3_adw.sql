@@ -11,6 +11,10 @@ select to_char(sysdate, 'SSSSS') time1 from dual;
  set termout off
  set echo off verify off
 
+ --for ADW to use hints
+ --alter session set optimizer_ignore_hints=false;
+ --/*+ no_result_cache */  for individual SQLs
+
 
 --### SECTION 3: DEFINE THE BIND VARIABLES 
 -- var b0 varchar2(32)
