@@ -63,7 +63,7 @@ REM smpawar
 @@?/rdbms/admin/sqlsessstart.sql
 REM
 DEF health_checks = 'Y';
-DEF shared_cursor = 'N';
+DEF shared_cursor = 'Y';
 DEF sql_monitor_reports = '12';
 REM
 DEF script = 'sqlhc';
