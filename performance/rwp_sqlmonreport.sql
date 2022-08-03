@@ -33,7 +33,7 @@ SET HEA OFF;
 SET TERM ON; 
 
 -- log
-SPO &&sqlmon_sqlid..txt APP;
+--SPO &&sqlmon_sqlid..txt APP;
 
 
 
@@ -231,16 +231,27 @@ SPO OFF;
 SET ECHO OFF FEED 6 VER ON SHOW OFF HEA ON LIN 80 NEWP 1 PAGES 14 LONG 80 LONGC 80 SQLC MIX TAB ON TRIMS OFF TI OFF TIMI OFF ARRAY 15 NUMF "" SQLP SQL> SUF sql BLO . RECSEP WR APPI OFF AUTOT OFF;
 
 
+set ver off pages 0 linesize 32767 trimspool on trim on long 1000000 longchunksize 10000000
+spool rwp_sqlmon_&&sqlmon_sqlid._perfhub_db.html
+select dbms_perf.report_perfhub(is_realtime=>0,type=>'active') from dual;
+spool off
+
+set ver off pages 0 linesize 32767 trimspool on trim on long 1000000 longchunksize 10000000
+spool rwp_sqlmon_&&sqlmon_sqlid._perfhub_sqlid.html
+select dbms_perf.report_sql(sql_id => '&&sqlmon_sqlid.', is_realtime=>0,type=>'active') from dual;
+spool off
+
+
+
 SET TERM ON
 
 -- get current time
-SPO &&sqlmon_sqlid..txt APP;
+--SPO &&sqlmon_sqlid..txt APP;
 COL current_time NEW_V current_time FOR A15;
 SELECT 'Completed: ' x, TO_CHAR(SYSDATE, 'YYYYMMDD_HH24MISS') current_time FROM DUAL;
 SET TERM OFF
 
 
-
-
 HOST zip -jmq rwp_&&sqlmon_sqlid._&&current_time. rwp_sqlmon_*
+
   
