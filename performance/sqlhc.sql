@@ -1,24 +1,22 @@
 SPO sqlhc.log
 SET DEF ^ TERM OFF ECHO ON AUTOP OFF VER OFF SERVEROUT ON SIZE 1000000;
 REM
-REM $Header: 1366133.1 sqlhc.sql 12.1.08 2014/04/18 carlos.sierra mauro.pagano $
+REM $Header: sqlhc.sql 2021/08/05 scharala $
 REM
-REM Copyright (c) 2000-2013, Oracle Corporation. All rights reserved.
+REM Copyright (c) 2000-2019, Oracle Corporation. All rights reserved.
 REM
-REM AUTHOR
-REM   carlos.sierra@oracle.com
-REM   mauro.pagano@oracle.com
-REM
-REM SCRIPT
-REM   sqlhc.sql SQL Health-Check (extract mode)
+REM NAME
+REM   sqlhc.sql SQL Health-Check script for one SQL ID.
 REM
 REM DESCRIPTION
-REM   Produces an HTML report with a list of observations based on
-REM   health-checks performed in and around a SQL statement that
+REM   Produces multiple HTML/Text reports with a list of observations and other information 
+REM   based on health-checks performed in and around a SQL statement that
 REM   may be performing poorly.
 REM
-REM   Inputs a memory-resident SQL_ID.
+REM   Inputs: A memory-resident SQL_ID.
 REM
+REM NOTES
+REM 
 REM   In addition to the health_check report, it generates some
 REM   additional diagnostics files regarding SQL performance.
 REM
@@ -27,6 +25,12 @@ REM   It does not perform any DDL commands.
 REM   It only performs DML commands against the PLAN_TABLE then it
 REM   rolls back those temporary inserts.
 REM   It can be used in Dataguard or any read-only database.
+REM
+REM   1. For possible errors see sqlhc.log.
+REM   2. If site has both Tuning and Diagnostics licenses then
+REM      specified T (Oracle Tuning pack includes Oracle Diagnostics)
+REM   3. On a read-only instance, the "Observations" section with the
+REM      results of the health-checks will be missing.
 REM
 REM PRE-REQUISITES
 REM   1. Execute as SYS or user with DBA role or user with access
@@ -48,12 +52,15 @@ REM   # sqlplus / as sysdba
 REM   SQL> START [path]sqlhc.sql [T|D|N] [SQL_ID]
 REM   SQL> START sqlhc.sql T 51x6yr9ym5hdc
 REM
-REM NOTES
-REM   1. For possible errors see sqlhc.log.
-REM   2. If site has both Tuning and Diagnostics licenses then
-REM      specified T (Oracle Tuning pack includes Oracle Diagnostics)
-REM   3. On a read-only instance, the "Observations" section with the
-REM      results of the health-checks will be missing.
+REM csierra  Created
+REM MODIFIED (03/05/2021)
+REM scharala 03/05/2021 - Fixed bugs relating to dbms_xplan and calling from TFA
+REM scharala 03/19/2021 - Reduced messages relating to CP/COP MV/RENAME on Windows / Linux
+REM scharala 05/08/2021 - Added the TCB facility
+REM scharala 21/08/2021 - Added log file for TCB facility
+REM smpawar
+
+@@?/rdbms/admin/sqlsessstart.sql
 REM
 DEF health_checks = 'Y';
 DEF shared_cursor = 'Y';
@@ -62,10 +69,10 @@ REM
 DEF script = 'sqlhc';
 DEF method = 'SQLHC';
 DEF mos_doc = '1366133.1';
-DEF doc_ver = '12.1.06';
-DEF doc_date = '2014/01/30';
+DEF doc_ver = '12.1.07';
+DEF doc_date = '2019/04/21';
 -- sqldx_output: HTML/CSV/BOTH/NONE
-DEF sqldx_output = 'CSV';
+DEF sqldx_output = 'NONE';
 
 /**************************************************************************************************/
 
@@ -91,10 +98,13 @@ VAR license CHAR(1);
 EXEC :license := '^^license.';
 
 COL unique_id NEW_V unique_id FOR A15;
-SELECT TO_CHAR(SYSDATE, 'YYYYMMDD_HH24MISS') unique_id FROM DUAL;
+--SELECT TO_CHAR(SYSDATE, 'YYYYMMDD_HH24MISS') unique_id FROM DUAL;
+--Amended by Stelios Charalambides on 29th May 2019 to remove seconds from the file name so that 20190529_173904 becomes 20190529_1739
+SELECT TO_CHAR(SYSDATE, 'YYYYMMDD_HH24MI') unique_id FROM DUAL;
+
 
 SET TERM ON;
---WHENEVER SQLERROR EXIT SQL.SQLCODE;
+WHENEVER SQLERROR EXIT SQL.SQLCODE;
 
 BEGIN
   IF '^^license.' IS NULL OR '^^license.' NOT IN ('T', 'D', 'N') THEN
@@ -139,7 +149,7 @@ VAR sql_id VARCHAR2(13);
 EXEC :sql_id := '^^sql_id.';
 
 SET TERM ON;
---WHENEVER SQLERROR EXIT SQL.SQLCODE;
+WHENEVER SQLERROR EXIT SQL.SQLCODE;
 
 BEGIN
   IF '^^sql_id.' IS NULL THEN
@@ -296,8 +306,9 @@ COL instance_number NEW_V instance_number FOR A10;
 SELECT TO_CHAR(instance_number) instance_number FROM v$instance;
 
 -- YYYYMMDD_HH24MISS
-COL time_stamp NEW_V time_stamp FOR A15;
-SELECT TO_CHAR(SYSDATE, 'YYYYMMDD_HH24MISS') time_stamp FROM DUAL;
+-- 21st April 2019 - Amended by Stelios Charalambides to remove the seconds from the timestamp. 
+COL time_stamp NEW_V time_stamp FOR A13;
+SELECT TO_CHAR(SYSDATE, 'YYYYMMDD_HH24MI') time_stamp FROM DUAL;
 
 -- YYYY-MM-DD/HH24:MI:SS
 COL time_stamp2 NEW_V time_stamp2 FOR A20;
@@ -514,12 +525,13 @@ EXEC :E_TABLE_COL  := 10;
  * ------------------------- */
 EXEC DBMS_APPLICATION_INFO.SET_CLIENT_INFO('^^method.: Global Health Check - ' || TO_CHAR(SYSDATE, 'YYYY-MM-DD/HH24:MI:SS'));
 
+-- (002)
 -- 5969780 STATISTICS_LEVEL = ALL on LINUX
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_GLOBAL, 'CBO PARAMETER', SYSTIMESTAMP, 'STATISTICS_LEVEL',
        'Parameter STATISTICS_LEVEL is set to ALL on ^^platform. platform.',
        'STATISTICS_LEVEL = ALL provides valuable metrics like A-Rows. Be aware of Bug <a target="MOS" href="^^bug_link.5969780">5969780</a> CPU overhead.<br>'||CHR(10)||
-       'Use a value of ALL only at the session level. You could use CBO hint /*+ gather_plan_statistics */ to accomplish the same.'
+       'Use a value of ALL only at the session level. You could use CBO hint /*+ gather_plan_statistics */ to accomplish the same.',95
   FROM v$system_parameter2
  WHERE :health_checks = 'Y'
    AND UPPER(name) = 'STATISTICS_LEVEL'
@@ -527,11 +539,13 @@ SELECT :E_GLOBAL, 'CBO PARAMETER', SYSTIMESTAMP, 'STATISTICS_LEVEL',
    AND '^^rdbms_version.' LIKE '10%'
    AND '^^platform.' LIKE '%LINUX%';
 
+-- 
+-- (004)
 -- cbo parameters with non-default values at sql level
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_GLOBAL, 'CBO PARAMETER', SYSTIMESTAMP, UPPER(name),
-       'CBO initialization parameter "'||name||'" with a non-default value of "'||value||'" as per V$SQL_OPTIMIZER_ENV.',
-       'Review the correctness of this non-default value "'||value||'" for SQL_ID '||:sql_id||'.'
+       'Review the non-default CBO initialization parameter "'||name||'" with a value of "'||value||'" for correctness.',
+       'Review the correctness of this non-default value "'||value||'" for SQL_ID '||:sql_id||'.',35
   FROM (
 SELECT DISTINCT name, value
   FROM v$sql_optimizer_env
@@ -539,13 +553,14 @@ SELECT DISTINCT name, value
    AND sql_id = :sql_id
    AND isdefault = 'NO' );
 
+-- (005)
 -- cbo parameters with non-default values at system level
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_GLOBAL, 'CBO PARAMETER', SYSTIMESTAMP, UPPER(g.name),
-       'CBO initialization parameter "'||g.name||'" with a non-default value of "'||g.value||'" as per V$SYS_OPTIMIZER_ENV.',
+       'Review the CBO initialization parameter "'||g.name||'" with a non-default value of "'||g.value||'" for correctness.',
        'Review the correctness of this non-default value "'||g.value||'".<br>'||CHR(10)||
        'Unset this parameter unless there is a strong reason for keeping its current value.<br>'||CHR(10)||
-       'Default value is "'||g.default_value||'" as per V$SYS_OPTIMIZER_ENV.'
+       'Default value is "'||g.default_value||'" as per V$SYS_OPTIMIZER_ENV.',35
   FROM v$sys_optimizer_env g
  WHERE :health_checks = 'Y'
    AND g.isdefault = 'NO'
@@ -558,20 +573,22 @@ SELECT NULL
    AND s.name = g.name
    AND s.value = g.value );
 
+-- (006)
 -- optimizer_features_enable <> rdbms_version at system level
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_GLOBAL, 'CBO PARAMETER', SYSTIMESTAMP, 'OPTIMIZER_FEATURES_ENABLE',
-       'DB version ^^rdbms_version. and OPTIMIZER_FEATURES_ENABLE ^^sys_ofe. do not match as per V$SYSTEM_PARAMETER2.',
-       'Be aware that you are using a prior version of the optimizer. New CBO features in your DB version may not be used.'
+       'Ensure that the OPTIMIZER_FEATURES_ENABLE parameter (^^sys_ofe.) is set correctly as it does not match ^^rdbms_version.',
+       'Be aware that you are using a prior version of the optimizer. New CBO features in your DB version may not be used.', 45
   FROM DUAL
  WHERE :health_checks = 'Y'
    AND SUBSTR('^^rdbms_version.', 1, LEAST(LENGTH('^^rdbms_version.'), LENGTH('^^sys_ofe.'))) <> SUBSTR('^^sys_ofe.', 1, LEAST(LENGTH('^^rdbms_version.'), LENGTH('^^sys_ofe.')));
 
+-- (006a)
 -- optimizer_features_enable <> rdbms_version at sql level
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_GLOBAL, 'CBO PARAMETER', SYSTIMESTAMP, 'OPTIMIZER_FEATURES_ENABLE',
-       'DB version ^^rdbms_version. and OPTIMIZER_FEATURES_ENABLE '||v.value||' do not match for SQL_ID '||:sql_id||' as per V$SQL_OPTIMIZER_ENV.',
-       'Be aware that you are using a prior version of the optimizer. New CBO features in your DB version may not be used.'
+       'Ensure that the OPTIMIZER_FEATURES_ENABLE '||v.value||' parameter and the DB version ^^rdbms_version. match for SQL_ID '||:sql_id||'.',
+       'Be aware that you are using a prior version of the optimizer. New CBO features in your DB version may not be used.',45
   FROM (
 SELECT DISTINCT value
   FROM v$sql_optimizer_env
@@ -580,12 +597,13 @@ SELECT DISTINCT value
    AND LOWER(name) = 'optimizer_features_enable'
    AND SUBSTR('^^rdbms_version.', 1, LEAST(LENGTH('^^rdbms_version.'), LENGTH(value))) <> SUBSTR(value, 1, LEAST(LENGTH('^^rdbms_version.'), LENGTH(value))) ) v;
 
+-- (007)
 -- optimizer_dynamic_sampling between 1 and 3 at system level
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_GLOBAL, 'CBO PARAMETER', SYSTIMESTAMP, 'OPTIMIZER_DYNAMIC_SAMPLING',
-       'Dynamic Sampling is set to small value of ^^sys_ds. as per V$SYSTEM_PARAMETER2.',
+       'Consider if you need to increase rhe value of OPTIMIZER_DYNAMIC_SAMPLING from ^^sys_ds. to a higher value as some objects have no statistics. See the MOS Note Optimizer Dynamic Statistics (OPTIMIZER_DYNAMIC_SAMPLING) (Doc ID 336267.1)',
        'Be aware that using such a small value may produce statistics of poor quality.<br>'||CHR(10)||
-       'If you rely on this functionality consider using a value no smaller than 4.'
+       'If you rely on this functionality consider using a value no smaller than 4.',60
   FROM plan_table pt,
        dba_tables t
  WHERE :health_checks = 'Y'
@@ -597,52 +615,57 @@ SELECT :E_GLOBAL, 'CBO PARAMETER', SYSTIMESTAMP, 'OPTIMIZER_DYNAMIC_SAMPLING',
    AND (t.last_analyzed IS NULL OR t.num_rows IS NULL)
    AND ROWNUM = 1;
 
+-- (008)
 -- db_file_multiblock_read_count should not be set
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_GLOBAL, 'CBO PARAMETER', SYSTIMESTAMP, 'DB_FILE_MULTIBLOCK_READ_COUNT',
-       'MBRC Parameter is set to "'||value||'" overriding its default value.',
+       'Check if DB_FILE_MULTIBLOCK_READ_COUNT (Currently "'||value||'") is set correctly as this is automatically calculated by Oracle. See MOS note How is Parameter DB_FILE_MULTIBLOCK_READ_COUNT Calculated? (Doc ID 1398860.1)',
        'The default value of this parameter is a value that corresponds to the maximum I/O size that can be performed efficiently.<br>'||CHR(10)||
        'This value is platform-dependent and is 1MB for most platforms.<br>'||CHR(10)||
-       'Because the parameter is expressed in blocks, it will be set to a value that is equal to the maximum I/O size that can be performed efficiently divided by the standard block size.'
+       'Because the parameter is expressed in blocks, it will be set to a value that is equal to the maximum I/O size that can be performed efficiently divided by the standard block size.',65
   FROM v$system_parameter2
  WHERE :health_checks = 'Y'
    AND UPPER(name) = 'DB_FILE_MULTIBLOCK_READ_COUNT'
    AND (isdefault = 'FALSE' OR ismodified <> 'FALSE');
 
+-- (009)
 -- nls_sort is not binary (session)
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_GLOBAL, 'NLS PARAMETER', SYSTIMESTAMP, 'NLS_SORT',
-       'NLS_SORT Session Parameter is set to "'||value||'" in V$NLS_PARAMETERS.',
-       'Setting NLS_SORT to anything other than BINARY causes a sort to use a full table scan, regardless of the path chosen by the optimizer.'
+       'Set NLS_SORT to "BINARY", (currently  "'||value||'") as recommended in MOS note Init.ora Parameter "NLS_SORT" Reference Note (Doc ID 30779.1).',
+       'Setting NLS_SORT to anything other than BINARY causes a sort to use a full table scan, regardless of the path chosen by the optimizer.',70
   FROM v$nls_parameters
  WHERE :health_checks = 'Y'
    AND UPPER(parameter) = 'NLS_SORT'
    AND UPPER(value) <> 'BINARY';
 
+-- (009a)
 -- nls_sort is not binary (instance)
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_GLOBAL, 'NLS PARAMETER', SYSTIMESTAMP, 'NLS_SORT',
-       'NLS_SORT Instance Parameter is set to "'||value||'" in V$SYSTEM_PARAMETER.',
-       'Setting NLS_SORT to anything other than BINARY causes a sort to use a full table scan, regardless of the path chosen by the optimizer.'
+       'Set NLS_SORT to "BINARY" (Currently "'||value||'") as recommended in MOS note Init.ora Parameter "NLS_SORT" Reference Note (Doc ID 30779.1).',
+       'Setting NLS_SORT to anything other than BINARY causes a sort to use a full table scan, regardless of the path chosen by the optimizer.', 70
   FROM v$system_parameter
  WHERE :health_checks = 'Y'
    AND UPPER(name) = 'NLS_SORT'
    AND UPPER(value) <> 'BINARY';
 
+-- (009b)
 -- nls_sort is not binary (global)
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_GLOBAL, 'NLS PARAMETER', SYSTIMESTAMP, 'NLS_SORT',
-       'NLS_SORT Global Parameter is set to "'||value||'" in NLS_DATABASE_PARAMETERS.',
-       'Setting NLS_SORT to anything other than BINARY causes a sort to use a full table scan, regardless of the path chosen by the optimizer.'
+       'Set NLS_SORT to "BINARY" (currently "'||value||'") as recommended in MOS note Init.ora Parameter "NLS_SORT" Reference Note (Doc ID 30779.1).',
+       'Setting NLS_SORT to anything other than BINARY causes a sort to use a full table scan, regardless of the path chosen by the optimizer.', 70
   FROM nls_database_parameters
  WHERE :health_checks = 'Y'
    AND UPPER(parameter) = 'NLS_SORT'
    AND UPPER(value) <> 'BINARY';
 
+-- (014)
 -- DBMS_STATS automatic gathering on 10g
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_GLOBAL, 'DBMS_STATS', SYSTIMESTAMP, 'DBA_SCHEDULER_JOBS',
-       'Automatic gathering of CBO statistics is enabled.',
+       'Disable this job immediately and gather statistics using the appropriate method.',
        CASE
          WHEN '^^is_ebs.' = 'Y' THEN
            'Disable this job immediately and re-gather statistics for all affected schemas using FND_STATS or coe_stats.sql.<br>'||CHR(10)||
@@ -657,16 +680,17 @@ SELECT :E_GLOBAL, 'DBMS_STATS', SYSTIMESTAMP, 'DBA_SCHEDULER_JOBS',
            'Be aware that small sample sizes could produce poor quality histograms,<br>'||CHR(10)||
            'which combined with bind sensitive predicates could render suboptimal plans.<br>'||CHR(10)||
            'See <a target="MOS" href="^^doc_link.465787.1">465787.1</a>.'
-         END
+         END, 74
   FROM dba_scheduler_jobs
  WHERE :health_checks = 'Y'
    AND job_name = 'GATHER_STATS_JOB'
    AND enabled = 'TRUE';
 
+-- (015)
 -- DBMS_STATS automatic gathering on 11g
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_GLOBAL, 'DBMS_STATS', SYSTIMESTAMP, 'DBA_AUTOTASK_CLIENT',
-       'Automatic gathering of CBO statistics is enabled.',
+       'Disable this job immediately and gather statistics using the appropriate method.',
        CASE
          WHEN '^^is_ebs.' = 'Y' THEN
            'Disable this job immediately and re-gather statistics for all affected schemas using FND_STATS or coe_stats.sql.<br>'||CHR(10)||
@@ -681,17 +705,18 @@ SELECT :E_GLOBAL, 'DBMS_STATS', SYSTIMESTAMP, 'DBA_AUTOTASK_CLIENT',
            'Be aware that small sample sizes could produce poor quality histograms,<br>'||CHR(10)||
            'which combined with bind sensitive predicates could render suboptimal plans.<br>'||CHR(10)||
            'See <a target="MOS" href="^^doc_link.465787.1">465787.1</a>.'
-         END
+         END, 66
   FROM dba_autotask_client
  WHERE :health_checks = 'Y'
    AND client_name = 'auto optimizer stats collection'
    AND status = 'ENABLED';
    
+-- (016)
 -- DBMS_STATS automatic gathering on 11g but not running for a week   
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_GLOBAL, 'DBMS_STATS', SYSTIMESTAMP, 'DBA_AUTOTASK_CLIENT',
-       'Automatic gathering of CBO statistics is enabled but no job was<br>executed in the last 8 days',
-       'The job is enabled in the system but there is no evidence it was ever<br>executed in the last 8 days.'
+       'Ensure the automated statistics jobs are executing as expected. See MOS Note Troubleshooting Scheduler Autotask Issues (Doc ID 1561498.1)',
+       'The job is enabled in the system but there is no evidence it was ever<br>executed in the last 8 days.', 76
   FROM dba_autotask_client
  WHERE :health_checks = 'Y'
    AND client_name = 'auto optimizer stats collection'
@@ -701,11 +726,12 @@ SELECT :E_GLOBAL, 'DBMS_STATS', SYSTIMESTAMP, 'DBA_AUTOTASK_CLIENT',
             WHERE client_name = 'auto optimizer stats collection'
               AND window_start_time > (SYSDATE-8)); 
 
+-- (016a)
 -- DBMS_STATS automatic gathering on 11g but some jobs not running for a week   
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_GLOBAL, 'DBMS_STATS', SYSTIMESTAMP, 'DBA_AUTOTASK_CLIENT',
-       'Automatic gathering of CBO statistics is enabled but some job did<br>not complete in the last 8 days.',
-       'The job is enabled in the system but there are some jobs in the<br>last 8 days that did not complete.'
+       'Ensure the automated statistics jobs are executing as expected. See MOS Note Troubleshooting Scheduler Autotask Issues (Doc ID 1561498.1)',
+       'The job is enabled in the system but there are some jobs in the<br>last 8 days that did not complete.',76
   FROM dba_autotask_client
  WHERE :health_checks = 'Y'
    AND client_name = 'auto optimizer stats collection'
@@ -716,31 +742,34 @@ SELECT :E_GLOBAL, 'DBMS_STATS', SYSTIMESTAMP, 'DBA_AUTOTASK_CLIENT',
                 AND window_start_time > (SYSDATE-8)
 			    AND (jobs_created-jobs_started > 0 OR jobs_started-jobs_completed > 0));		  
 
+-- (023)
 -- multiple CBO environments in SQL Area
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_GLOBAL, 'PLAN', SYSTIMESTAMP, 'OPTIMIZER_ENV',
-       'SQL Area references '||COUNT(DISTINCT optimizer_env_hash_value)||' distinct CBO Environments for this one SQL.',
-       'Distinct CBO Environments may produce different Plans.'
+       'Check the applicability of having multiple CBO environments set up for one SQL. There are ('||COUNT(DISTINCT optimizer_env_hash_value)||' distinct CBO Environments for this one SQL). See https://docs.oracle.com/database/121/REFRN/GUID-2B9340D7-4AA8-4894-94C0-D5990F67BE75.htm#REFRN30246',
+       'Distinct CBO Environments may produce different Plans.', 71
   FROM gv$sqlarea_plan_hash
  WHERE :health_checks = 'Y'
    AND sql_id = :sql_id
 HAVING COUNT(*) > 1;
 
+-- (023a)
 -- multiple CBO environments in GV$SQL
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_GLOBAL, 'PLAN', SYSTIMESTAMP, 'OPTIMIZER_ENV',
-       'GV$SQL references '||COUNT(DISTINCT optimizer_env_hash_value)||' distinct CBO Environments for this one SQL.',
-       'Distinct CBO Environments may produce different Plans.'
+       'Check the applicability of having multiple CBO environments set up for one SQL. (Currently refernces '||COUNT(DISTINCT optimizer_env_hash_value)||' distinct CBO Environments for this one SQL) See https://docs.oracle.com/database/121/REFRN/GUID-2B9340D7-4AA8-4894-94C0-D5990F67BE75.htm#REFRN30246',
+       'Distinct CBO Environments may produce different Plans.', 71
   FROM gv$sql
  WHERE :health_checks = 'Y'
    AND sql_id = :sql_id
 HAVING COUNT(*) > 1;
 
+-- (023b)
 -- multiple CBO environments in AWR
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_GLOBAL, 'PLAN', SYSTIMESTAMP, 'OPTIMIZER_ENV',
-       'AWR references '||COUNT(DISTINCT optimizer_env_hash_value)||' distinct CBO Enviornments for this one SQL.',
-       'Distinct CBO Environments may produce different Plans.'
+       'Check the applicability of having multiple CBO environments set up for one SQL. (Currently references '||COUNT(DISTINCT optimizer_env_hash_value)||' distinct CBO Enviornments for this one SQL.) See https://docs.oracle.com/database/121/REFRN/GUID-2B9340D7-4AA8-4894-94C0-D5990F67BE75.htm#REFRN30246',
+       'Distinct CBO Environments may produce different Plans.', 72
   FROM dba_hist_sqlstat
  WHERE :health_checks = 'Y'
    AND :license IN ('T', 'D')
@@ -748,12 +777,13 @@ SELECT :E_GLOBAL, 'PLAN', SYSTIMESTAMP, 'OPTIMIZER_ENV',
    AND sql_id = :sql_id
 HAVING COUNT(*) > 1;
 
+-- (024)
 -- multiple plans with same PHV but different predicate ordering
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_GLOBAL, 'PLAN', SYSTIMESTAMP, 'PREDICATES ORDERING',
-       'There are plans with same PHV '||v.plan_hash_value||' but different predicate ordering.',
+       'Check predicate is correct. There are plans with same PHV '||v.plan_hash_value||' but different predicate ordering. See MOS Note Query Performance is influenced by its predicate order (Doc ID 276877.1)',
        'Different ordering in the predicates for '||v.plan_hash_value||' can affect the performance of this SQL,<br>'||CHR(10)||
-       'focus on Step ID '||v.id||' predicates '||v.predicates||' .'
+       'focus on Step ID '||v.id||' predicates '||v.predicates||' .', 75
   FROM ( 
 WITH d AS (
 SELECT sql_id,
@@ -799,13 +829,14 @@ SELECT v.plan_hash_value,
        1, 2, 3, 6, 4, 5) v
   WHERE :health_checks = 'Y' ; 
 
+-- (025)
 -- plans with implicit data_type conversion
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_GLOBAL, 'PLAN', SYSTIMESTAMP, 'PLAN_HASH_VALUE',
-       'Plan '||v.plan_hash_value||' may have implicit data_type conversion functions in Filter Predicates.',
+       'Check the applicability of the function causing and INTERNAL_FUNCTION in the Filter Predicates of PHV '||v.plan_hash_value||'. See MOS Note Index on a Timestamp Column Cannot be Accessed Properly (Doc ID 1321016.1)',
        'Review Execution Plans.<br>'||CHR(10)||
        'If Filter Predicates for '||v.plan_hash_value||' include unexpected INTERNAL_FUNCTION to perform an implicit data_type conversion,<br>'||CHR(10)||
-       'be sure it is not preventing a column from being used as an Access Predicate.'
+       'be sure it is not preventing a column from being used as an Access Predicate.', 87
   FROM (
 SELECT DISTINCT plan_hash_value
   FROM gv$sql_plan
@@ -815,13 +846,14 @@ SELECT DISTINCT plan_hash_value
    AND filter_predicates LIKE '%INTERNAL_FUNCTION%'
  ORDER BY 1) v;
 
+-- (026)
 -- plan operations with cost 0 and card 1
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_GLOBAL, 'PLAN', SYSTIMESTAMP, 'PLAN_HASH_VALUE',
-       'Plan '||v.plan_hash_value||' has operations with Cost 0 and Card 1. Possible incorrect Selectivity.',
+       'Review Plan '||v.plan_hash_value||' lines with Cost 0. Check for faulty statistics, Predicates out of Range or Histogram Skewness. See MOS Note Predicate Selectivity (Doc ID 68992.1)',
        'Review Execution Plans.<br>'||CHR(10)||
        'Look for Plan operations in '||v.plan_hash_value||' where Cost is 0 and Estimated Cardinality is 1.<br>'||CHR(10)||
-       'Suspect predicates out of range or incorrect statistics.'
+       'Suspect predicates out of range or incorrect statistics.', 79
   FROM (
 SELECT plan_hash_value
   FROM gv$sql_plan
@@ -840,11 +872,12 @@ SELECT plan_hash_value
    AND cost = 0
    AND cardinality = 1) v;
 
+-- (027)
 -- high version count
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_GLOBAL, 'VERSION COUNT', SYSTIMESTAMP, 'VERSION COUNT',
-       'This SQL shows evidence of high version count of '||MAX(v.version_count)||'.',
-       'Review Execution Plans for details.'
+       'Use MOS Note High SQL Version Counts - Script to determine reason(s) (Doc ID 438755.1) to determine the reason for a high version count ('||MAX(v.version_count)||' versions).',
+       'Review Execution Plans for details.', 39
   FROM (
 SELECT MAX(version_count) version_count
   FROM gv$sqlarea_plan_hash
@@ -859,13 +892,14 @@ SELECT MAX(version_count) version_count
    AND sql_id = :sql_id ) v
 HAVING MAX(v.version_count) > 20;
 
+-- (028)
 -- first rows
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_GLOBAL, 'OPTIMZER MODE', SYSTIMESTAMP, 'FIRST_ROWS',
-       'OPTIMIZER_MODE was set to FIRST_ROWS in '||v.pln_count||' Plan(s).',
+       'Check the applicability of OPTIMIZER_MODE being set to FIRST_ROWS in '||v.pln_count||' Plan(s). See MOS Note Using the FIRST_ROWS hint within a query gives poor performance (Doc ID 272202.1).',
        'The optimizer uses a mix of cost and heuristics to find a best plan for fast delivery of the first few rows.<br>'||CHR(10)||
        'Using heuristics sometimes leads the query optimizer to generate a plan with a cost that is significantly larger than the cost of a plan without applying the heuristic.<br>'||CHR(10)||
-       'FIRST_ROWS is available for backward compatibility and plan stability; use FIRST_ROWS_n instead.'
+       'FIRST_ROWS is available for backward compatibility and plan stability; use FIRST_ROWS_n instead.', 45
 FROM (
 SELECT COUNT(*) pln_count
   FROM (
@@ -885,12 +919,13 @@ SELECT plan_hash_value
  WHERE :health_checks = 'Y'
    AND v.pln_count > 0;
 
+-- (030)
 -- fixed objects missing stats
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_GLOBAL, 'FIXED OBJECTS', SYSTIMESTAMP, 'DBA_TAB_COL_STATISTICS',
        'There exist(s) '||v.tbl_count||' Fixed Object(s) accessed by this SQL without CBO statistics.',
        'Consider gathering statistics for fixed objects using DBMS_STATS.GATHER_FIXED_OBJECTS_STATS.<br>'||CHR(10)||
-       'See <a target="MOS" href="^^doc_link.465787.1">465787.1</a>.'
+       'See <a target="MOS" href="^^doc_link.465787.1">465787.1</a>.', 81
 FROM (
 SELECT COUNT(*) tbl_count
   FROM plan_table pt,
@@ -909,24 +944,26 @@ SELECT NULL
  WHERE :health_checks = 'Y'
    AND v.tbl_count > 0;
 
+-- (031)
 -- system statistics not gathered
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_GLOBAL, 'DBMS_STATS', SYSTIMESTAMP, 'SYSTEM STATISTICS',
-       'Workload CBO System Statistics are not gathered. CBO is using default values.',
+       'Workload CBO System Statistics are not gathered. CBO is using default values. See MOS Note How to Collect and Display System Statistics (CPU and IO) for CBO use (Doc ID 149560.1).',
        'Consider gathering workload system statistics using DBMS_STATS.GATHER_SYSTEM_STATS.<br>'||CHR(10)||
-       'See also <a target="MOS" href="^^doc_link.465787.1">465787.1</a>.'
+       'See also <a target="MOS" href="^^doc_link.465787.1">465787.1</a>.', 33
   FROM sys.aux_stats$
  WHERE :health_checks = 'Y'
    AND sname = 'SYSSTATS_MAIN'
    AND pname = 'CPUSPEED'
    AND pval1 IS NULL;
 
+-- (032)
 -- mreadtim < sreadtim
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_GLOBAL, 'DBMS_STATS', SYSTIMESTAMP, 'SYSTEM STATISTICS',
-       'Multi-block read time of '||a1.pval1||'ms seems too small compared to single-block read time of '||a2.pval1||'ms.',
+       'Check the correctness of MREADTIM (Multi-block read time) of '||a1.pval1||' which seems too small compared to single-block read time of '||a2.pval1||'. See MOS Note System Statistics: Scaling the System to Improve CBO optimizer (Doc ID 153761.1).',
        'Consider gathering workload system statistics using DBMS_STATS.GATHER_SYSTEM_STATS or adjusting SREADTIM and MREADTIM using DBMS_STATS.SET_SYSTEM_STATS.<br>'||CHR(10)||
-       'See also <a target="MOS" href="^^doc_link.465787.1">465787.1</a>.'
+       'See also <a target="MOS" href="^^doc_link.465787.1">465787.1</a>.', 48
   FROM sys.aux_stats$ a1, sys.aux_stats$ a2
  WHERE :health_checks = 'Y'
    AND a1.sname = 'SYSSTATS_MAIN'
@@ -935,12 +972,13 @@ SELECT :E_GLOBAL, 'DBMS_STATS', SYSTIMESTAMP, 'SYSTEM STATISTICS',
    AND a2.pname = 'SREADTIM'
    AND a1.pval1 < a2.pval1;
 
+-- (033)
 -- (1.2 * sreadtim) > mreadtim > sreadtim
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_GLOBAL, 'DBMS_STATS', SYSTIMESTAMP, 'SYSTEM STATISTICS',
-       'Multi-block read time of '||a1.pval1||'ms seems too small compared to single-block read time of '||a2.pval1||'ms.',
+       'Check the correctness of MREADTIM (Multi-block read time) of '||a1.pval1||' which seems too small compared to single-block read time of '||a2.pval1||'. See MOS Note System Statistics: Scaling the System to Improve CBO optimizer (Doc ID 153761.1).',
        'Consider gathering workload system statistics using DBMS_STATS.GATHER_SYSTEM_STATS or adjusting SREADTIM and MREADTIM using DBMS_STATS.SET_SYSTEM_STATS.<br>'||CHR(10)||
-       'See also <a target="MOS" href="^^doc_link.465787.1">465787.1</a>.'
+       'See also <a target="MOS" href="^^doc_link.465787.1">465787.1</a>.', 47
   FROM sys.aux_stats$ a1, sys.aux_stats$ a2
  WHERE :health_checks = 'Y'
    AND a1.sname = 'SYSSTATS_MAIN'
@@ -950,12 +988,13 @@ SELECT :E_GLOBAL, 'DBMS_STATS', SYSTIMESTAMP, 'SYSTEM STATISTICS',
    AND (1.2 * a2.pval1) > a1.pval1
    AND a1.pval1 > a2.pval1;
 
+-- (034)
 -- sreadtim < 2
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_GLOBAL, 'DBMS_STATS', SYSTIMESTAMP, 'SYSTEM STATISTICS',
-       'Single-block read time of '||pval1||' milliseconds seems too small.',
+       'Check the value of SREADTIM on this non-Exadata system. Single-block read time of '||pval1||' ms seems too small. See MOS Note System Statistics: Scaling the System to Improve CBO optimizer (Doc ID 153761.1).',
        'Consider gathering workload system statistics using DBMS_STATS.GATHER_SYSTEM_STATS or adjusting SREADTIM using DBMS_STATS.SET_SYSTEM_STATS.<br>'||CHR(10)||
-       'See also <a target="MOS" href="^^doc_link.465787.1">465787.1</a>.'
+       'See also <a target="MOS" href="^^doc_link.465787.1">465787.1</a>.', 32
   FROM sys.aux_stats$
  WHERE :health_checks = 'Y'
    AND sname = 'SYSSTATS_MAIN'
@@ -963,12 +1002,13 @@ SELECT :E_GLOBAL, 'DBMS_STATS', SYSTIMESTAMP, 'SYSTEM STATISTICS',
    AND pval1 < 2
    AND NVL('^^exadata.','N') = 'N'; 
 
+-- (035)
 -- mreadtim < 3
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_GLOBAL, 'DBMS_STATS', SYSTIMESTAMP, 'SYSTEM STATISTICS',
-       'Multi-block read time of '||pval1||' milliseconds seems too small.',
+       'Check the value of MREADTIM on this non-Exadata system. Multi-block read time of '||pval1||' milliseconds which seems too small. See MOS Note System Statistics: Scaling the System to Improve CBO optimizer (Doc ID 153761.1).',
        'Consider gathering workload system statistics using DBMS_STATS.GATHER_SYSTEM_STATS or adjusting MREADTIM using DBMS_STATS.SET_SYSTEM_STATS.<br>'||CHR(10)||
-       'See also <a target="MOS" href="^^doc_link.465787.1">465787.1</a>.'
+       'See also <a target="MOS" href="^^doc_link.465787.1">465787.1</a>.', 32
   FROM sys.aux_stats$
  WHERE :health_checks = 'Y'
    AND sname = 'SYSSTATS_MAIN'
@@ -976,12 +1016,13 @@ SELECT :E_GLOBAL, 'DBMS_STATS', SYSTIMESTAMP, 'SYSTEM STATISTICS',
    AND pval1 < 3
    AND NVL('^^exadata.','N') = 'N'; 
 
+-- (036)
 -- sreadtim > 18
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_GLOBAL, 'DBMS_STATS', SYSTIMESTAMP, 'SYSTEM STATISTICS',
-       'Single-block read time of '||pval1||' milliseconds seems too large.',
+       'Check the value of SREADTIM (Single-block read time) on this non-Exadata system, of '||pval1||' milliseconds which seems too large. See MOS Note System Statistics: Scaling the System to Improve CBO optimizer (Doc ID 153761.1).',
        'Consider gathering workload system statistics using DBMS_STATS.GATHER_SYSTEM_STATS or adjusting SREADTIM using DBMS_STATS.SET_SYSTEM_STATS.<br>'||CHR(10)||
-       'See also <a target="MOS" href="^^doc_link.465787.1">465787.1</a> and Bug <a target="MOS" href="^^bug_link.9842771">9842771</a>.'
+       'See also <a target="MOS" href="^^doc_link.465787.1">465787.1</a> and Bug <a target="MOS" href="^^bug_link.9842771">9842771</a>.', 32
   FROM sys.aux_stats$
  WHERE :health_checks = 'Y'
    AND sname = 'SYSSTATS_MAIN'
@@ -989,12 +1030,13 @@ SELECT :E_GLOBAL, 'DBMS_STATS', SYSTIMESTAMP, 'SYSTEM STATISTICS',
    AND pval1 > 18
    AND NVL('^^exadata.','N') = 'N'; 
 
+-- (037)
 -- mreadtim > 522
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_GLOBAL, 'DBMS_STATS', SYSTIMESTAMP, 'SYSTEM STATISTICS',
-       'Multi-block read time of '||pval1||' milliseconds seems too large.',
+       'Take action to adjust MREADTIM (Multi-block read time) as it is too high ('||pval1||' milliseconds). See MOS Note System Statistics: Scaling the System to Improve CBO optimizer (Doc ID 153761.1).',
        'Consider gathering workload system statistics using DBMS_STATS.GATHER_SYSTEM_STATS or adjusting MREADTIM using DBMS_STATS.SET_SYSTEM_STATS.<br>'||CHR(10)||
-       'See also <a target="MOS" href="^^doc_link.465787.1">465787.1</a> and Bug <a target="MOS" href="^^bug_link.9842771">9842771</a>.'
+       'See also <a target="MOS" href="^^doc_link.465787.1">465787.1</a> and Bug <a target="MOS" href="^^bug_link.9842771">9842771</a>.', 58
   FROM sys.aux_stats$
  WHERE :health_checks = 'Y'
    AND sname = 'SYSSTATS_MAIN'
@@ -1002,12 +1044,13 @@ SELECT :E_GLOBAL, 'DBMS_STATS', SYSTIMESTAMP, 'SYSTEM STATISTICS',
    AND pval1 > 522
    AND NVL('^^exadata.','N') = 'N'; 
    
+-- (038)
 -- sreadtim not between 0.5 and 10 in Exadata
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_GLOBAL, 'DBMS_STATS', SYSTIMESTAMP, 'SYSTEM STATISTICS',
-       'Single-block read time of '||pval1||' milliseconds seems unlikely for an Exadata system.',
+       'Consider taking action to adjust SREADTIM Single-block read time of '||pval1||'. See MOS Note System Statistics: Scaling the System to Improve CBO optimizer (Doc ID 153761.1).',
        'Consider gathering workload system statistics using DBMS_STATS.GATHER_SYSTEM_STATS or adjusting SREADTIM using DBMS_STATS.SET_SYSTEM_STATS.<br>'||CHR(10)||
-       'See also <a target="MOS" href="^^doc_link.465787.1">465787.1</a> and Bug <a target="MOS" href="^^bug_link.9842771">9842771</a>.'
+       'See also <a target="MOS" href="^^doc_link.465787.1">465787.1</a> and Bug <a target="MOS" href="^^bug_link.9842771">9842771</a>.', 58
   FROM sys.aux_stats$
  WHERE :health_checks = 'Y'
    AND sname = 'SYSSTATS_MAIN'
@@ -1015,12 +1058,13 @@ SELECT :E_GLOBAL, 'DBMS_STATS', SYSTIMESTAMP, 'SYSTEM STATISTICS',
    AND pval1 NOT BETWEEN 0.5 AND 10
    AND '^^exadata.' = 'Y';   
    
+-- (041)
 -- mreadtim not between 0.5 and 10 in Exadata
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_GLOBAL, 'DBMS_STATS', SYSTIMESTAMP, 'SYSTEM STATISTICS',
-       'Multi-block read time of '||pval1||' milliseconds seems unlikely for  an Exadata system.',
+       'Consider collecting workload statistics or Exadata System Statistics. Multi Block read time of '||pval1||' milliseconds seems unlikely for an Exadata system. See MOS Note Oracle Exadata Database Machine Setup/Configuration Best Practices (Doc ID 1274318.1).',
        'Consider gathering workload system statistics using DBMS_STATS.GATHER_SYSTEM_STATS or adjusting MREADTIM using DBMS_STATS.SET_SYSTEM_STATS.<br>'||CHR(10)||
-       'See also <a target="MOS" href="^^doc_link.465787.1">465787.1</a> and Bug <a target="MOS" href="^^bug_link.9842771">9842771</a>.'
+       'See also <a target="MOS" href="^^doc_link.465787.1">465787.1</a> and Bug <a target="MOS" href="^^bug_link.9842771">9842771</a>.', 69
   FROM sys.aux_stats$
  WHERE :health_checks = 'Y'
    AND sname = 'SYSSTATS_MAIN'
@@ -1028,11 +1072,12 @@ SELECT :E_GLOBAL, 'DBMS_STATS', SYSTIMESTAMP, 'SYSTEM STATISTICS',
    AND pval1 NOT BETWEEN 0.5 AND 10
    AND '^^exadata.' = 'Y';    
    
+-- (043)
 -- exadata specific check, offload disabled because of bad timezone file to cells (bug 11836425)   
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_GLOBAL, 'OFFLOAD', SYSTIMESTAMP, 'OFFLOAD OFF',
-       'Due to a timezone upgrade pending the offload might be disabled.',
-       'Offload might get rejected if the cells don''t have the propert timezone file.'
+       'Check your Offload capability on Exadata. It may be affected by Time Zone problems.',
+       'Offload might get rejected if the cells don''t have the propert timezone file.', 37
   FROM database_properties
  WHERE :health_checks = 'Y'
    AND property_name = 'DST_UPGRADE_STATE' 
@@ -1040,39 +1085,44 @@ SELECT :E_GLOBAL, 'OFFLOAD', SYSTIMESTAMP, 'OFFLOAD OFF',
    AND ROWNUM = 1
    AND '^^exadata.' = 'Y'; 
    
+-- (044) - This check found to be faulty. SNC. 5th April 2019. 
 -- Exadata specific check, offload disabled because tables with CACHE = YES
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_GLOBAL, 'OFFLOAD', SYSTIMESTAMP, 'OFFLOAD OFF',
-       'There is/are tables(s) with property CACHE = ''Y'', this causes offload to be disabled on it/them.',
-       'Offload is not used for tables that have property CACHE = ''Y''.'
+       'Check the applicability of the CACHE setting This causes offload to be disabled on it/them.',
+       'Offload is not used for tables that have property CACHE = ''Y''.', 35
   FROM plan_table pt,
-       dba_tables t
+       dba_tables t,
+	   dba_objects o
  WHERE :health_checks = 'Y'
    AND pt.object_type = 'TABLE'
    AND pt.object_owner = t.owner
    AND pt.object_name = t.table_name
-   AND t.object_type = 'TABLE'
+   and o.object_name = t.table_name
+   AND o.object_type = 'TABLE'
    AND ROWNUM = 1
    AND t.cache = 'Y'
    AND '^^exadata.' = 'Y';    
    
+-- (045)
 -- Exadata specific check, offload disabled for SQL executed by shared servers
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_GLOBAL, 'OFFLOAD', SYSTIMESTAMP, 'OFFLOAD OFF',
-       'Offload is not used for SQLs executed from Shared Server.',
-       'SQLs executed by Shared Server cannot be offloaded since they don''t use direct path reads.'
+       'Check the applicability of the Shared Server configuration on this Exadata machine. Offload is not used for SQLs executed from Shared Server. See MOS Note Exadata: Shared Server Connect Prevents Offloading To Storage Cells (Doc ID 1472538.1).',
+       'SQLs executed by Shared Server cannot be offloaded since they don''t use direct path reads.', 87
   FROM v$system_parameter2 
  WHERE :health_checks = 'Y'
    AND UPPER(name) = 'SHARED_SERVERS'
    AND UPPER(value) > 0
    AND '^^exadata.' = 'Y';   
 
+-- (046)
 -- Exadata specific check, offload disabled for serial DML 
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_GLOBAL, 'OFFLOAD', SYSTIMESTAMP, 'OFFLOAD OFF',
-       'Offload is not used for SQLs that don''t use direct path reads.',
+       'Reminder: Offload is not used for SQLs that don''t use direct path reads. See MOS Note Exadata Smartscan Is Not Being Used On Insert As Select (Doc ID 1348116.1).',
        'Serial DMLs cannot be offloaded by default since they don''t use direct path reads<br>'||CHR(10)||
-	   'If this execution is serial then make sure to use direct path reads or offload won'' be possible.'
+	   'If this execution is serial then make sure to use direct path reads or offload won'' be possible.', 14
   FROM v$sql 
  WHERE :health_checks = 'Y'
    AND TRIM(UPPER(SUBSTR(LTRIM(sql_text),1,6))) IN ('INSERT','UPDATE','DELETE','MERGE')
@@ -1080,51 +1130,60 @@ SELECT :E_GLOBAL, 'OFFLOAD', SYSTIMESTAMP, 'OFFLOAD OFF',
    AND ROWNUM = 1
    AND '^^exadata.' = 'Y';  
 
--- AutoDOP and no IO Calibration   
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+-- (047)
+-- AutoDOP and no IO Calibration  
+-- Please note the previous version used v$dba_rsrs_cio_calibrate
+-- AutoDOP and no IO Calibration, applies to non-Exadata only (Ted Persky correction. 23rd August 2018)
+-- 
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_GLOBAL, 'PX', SYSTIMESTAMP, 'AUTODOP OFF',
-       'AutoDOP is enable but there are no IO Calibration stats.',
-       'AutoDOP requires IO Calibration stats, consider collecting them using DBMS_RESOURCE_MANAGER.CALIBRATE_IO.'
+       'Check for applicability of Bug 9102474 (Bug 9102474 - AutoDOP is is valid/enabled only if io calibrate statistics are available (Doc ID 9102474.8)).',
+       'AutoDOP requires IO Calibration stats, consider collecting them using DBMS_RESOURCE_MANAGER.CALIBRATE_IO.', 15
   FROM v$system_parameter2 
  WHERE :health_checks = 'Y'
    AND UPPER(name) = 'PARALLEL_DEGREE_POLICY'
    AND UPPER(value) IN ('AUTO','LIMITED')
    AND NOT EXISTS (SELECT 1 
-                     FROM v$dba_rsrc_io_calibrate); 
+                     FROM dba_rsrc_io_calibrate); 
 
+-- (048)
 -- Manuaul DOP and Tables with DEFAULT degree
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_GLOBAL, 'PX', SYSTIMESTAMP, 'MANUAL DOP WITH DEFAULT',
-       'The DEGREE on some tables in set to DEFAULT and PARALLEL_DEGREE_POLICY is MANUAL',
-       'DEFAULT degree combined with PARALLEL_DEGREE_POLICY = MANUAL might translate in a high degree of parallelism.'
+       'Check the applicability of setting DEGREE to DEFAULT when PARALLEL_DEGREE_POLICY is MANUAL. See MOS Note Oracle 11g Release 2: New Parallel Query Parameters (Doc ID 1264548.1).',
+       'DEFAULT degree combined with PARALLEL_DEGREE_POLICY = MANUAL might translate in a high degree of parallelism.',95
   FROM v$system_parameter2 
  WHERE :health_checks = 'Y'
    AND UPPER(name) = 'PARALLEL_DEGREE_POLICY'
    AND UPPER(value) = 'MANUAL'
    AND EXISTS (SELECT 1 
                  FROM plan_table pt,
-                      dba_tables t
+                      dba_tables t,
+					  dba_objects o
                 WHERE pt.object_type = 'TABLE'
                   AND pt.object_owner = t.owner
+				  and t.table_name = o.object_name
                   AND pt.object_name = t.table_name
-                  AND t.object_type = 'TABLE'
+                  AND o.object_type = 'TABLE'
                   AND t.degree = 'DEFAULT'); 					 
    
+-- (052)
 -- sql with policies as per v$vpd_policy
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_GLOBAL, 'VDP', SYSTIMESTAMP, 'V$VPD_POLICY',
-       'Virtual Private Database. There is one or more policies affecting this SQL.',
-       'Review Execution Plans and look for their injected predicates.'
+       'Check the injected predicates below each individual plan to make sure it is applicable on this Virtual Private Database. See MOS Note How to Investigate Query Performance Regressions Caused by VPD (FGAC) Predicates? (Doc ID 967042.1).',
+       'Review Execution Plans and look for their injected predicates.', 16
   FROM v$vpd_policy
  WHERE :health_checks = 'Y'
    AND sql_id = :sql_id
 HAVING COUNT(*) > 0;
 
+-- (055)
 -- materialized views with rewrite enabled
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_GLOBAL, 'MAT_VIEW', SYSTIMESTAMP, 'REWRITE_ENABLED',
-       'There are '||COUNT(*)||' materialized views with rewrite enabled.',
-       'A large number of materialized views could affect parsing time since CBO would have to evaluate each during a hard-parse.'
+       'Check that all Materialized Views are applicable. There is/are '||COUNT(*)||' materialized view(s) with rewrite enabled. See MOS Note Master Note for Materialized View (MVIEW) (Doc ID 1353040.1).',
+       'A large number of materialized views could affect parsing time since CBO would have to evaluate each during a hard-parse.', 9
   FROM v$system_parameter2 p,
        dba_mviews m
  WHERE :health_checks = 'Y'
@@ -1133,22 +1192,24 @@ SELECT :E_GLOBAL, 'MAT_VIEW', SYSTIMESTAMP, 'REWRITE_ENABLED',
    AND m.rewrite_enabled = 'Y'
 HAVING COUNT(*) > 1;
 
+-- (057)
 -- rewrite equivalences from DBMS_ADVANCED_REWRITE
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_GLOBAL, 'REWRITE_EQUIVALENCE', SYSTIMESTAMP, 'REWRITE_EQUIVALENCE',
        'There is/are '||COUNT(*)||' rewrite equivalence(s) defined by the owner(s) of the involved objects.',
-       'A rewrite equivalence makes the CBO rewrite the original SQL to a different one so that needs to be considered when analyzing the case.'
+       'A rewrite equivalence makes the CBO rewrite the original SQL to a different one so that needs to be considered when analyzing the case.',3
   FROM dba_rewrite_equivalences m,
        (SELECT DISTINCT object_owner owner FROM plan_table) o
  WHERE :health_checks = 'Y'
    AND m.owner = o.owner
 HAVING COUNT(*) > 0;
 
+-- (058)
 -- table with bitmap index(es)
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_GLOBAL, 'INDEX', SYSTIMESTAMP, 'BITMAP',
-       'Your DML statement references '||COUNT(DISTINCT pt.object_name||pt.object_owner)||' Table(s) with at least one Bitmap index.',
-       'Be aware that frequent DML operations operations in a Table with Bitmap indexes may produce contention where concurrent DML operations are common. If your SQL suffers of "TX-enqueue row lock contention" suspect this situation.'
+       'Ensure the bitmap index(es) referenced in the DML ('||COUNT(DISTINCT pt.object_name||pt.object_owner)||' Table(s)) does not also cause "enq: TX - row lock contention". See MOS Note Waits for Enq: TX - ... Type Events - Transaction (TX) Lock Example Scenarios (Doc ID 62354.1).',
+       'Be aware that frequent DML operations operations in a Table with Bitmap indexes may produce contention where concurrent DML operations are common. If your SQL suffers of "TX-enqueue row lock contention" suspect this situation.',32
   FROM plan_table pt,
        dba_indexes i
  WHERE :health_checks = 'Y'
@@ -1164,11 +1225,12 @@ SELECT NULL
    AND s.command_type IN (2, 6, 7)) -- INSERT, UPDATE, DELETE
 HAVING COUNT(*) > 0;
 
+-- (059)
 -- index in plan no longer exists
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT DISTINCT :E_INDEX, 'INDEX', SYSTIMESTAMP, pt.object_owner||'.'||pt.object_name,
-       'Index referenced by an Execution Plan no longer exists.',
-       'If a Plan references a missing index then this Plan can no longer be generated by the CBO.'
+       'Check if the index referenced in the execution plan has been droppped. See MOS Note Index Hints Seems to Be Ignored by Optimizer (Doc ID 2381118.1).',
+       'If a Plan references a missing index then this Plan can no longer be generated by the CBO.', 86
   FROM plan_table pt
  WHERE :health_checks = 'Y'
    AND pt.object_type = 'INDEX'
@@ -1180,12 +1242,13 @@ SELECT NULL
    AND pt.object_owner = i.owner
    AND pt.object_name = i.index_name );
 
+-- (060)
 -- index in plan is now unusable
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT DISTINCT :E_INDEX, 'INDEX', SYSTIMESTAMP, pt.object_owner||'.'||pt.object_name,
-       'Index referenced by an Execution Plan is now unusable.',
+       'Check if the index referenced in the execution plan is usable. Also see MOS Note Unusable Index Segment Still Exists in DBA_SEGMENTS for Alter Table Move (Doc ID 1265948.1).',
        'If a Plan references an unusable index then this Plan cannot be generated by the CBO.<br>'||CHR(10)||
-       'If you need to enable tha Plan that references this index you need to rebuild it first.'
+       'If you need to enable tha Plan that references this index you need to rebuild it first.', 83
   FROM plan_table pt,
        dba_indexes i
  WHERE :health_checks = 'Y'
@@ -1196,12 +1259,13 @@ SELECT DISTINCT :E_INDEX, 'INDEX', SYSTIMESTAMP, pt.object_owner||'.'||pt.object
    AND i.partitioned = 'NO'
    AND i.status = 'UNUSABLE';
 
+-- (061)
 -- index in plan has now unusable partitions
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT DISTINCT :E_INDEX, 'INDEX', SYSTIMESTAMP, pt.object_owner||'.'||pt.object_name,
-       'Index referenced by an Execution Plan has now unusable partitions.',
+       'Check why the partitioned index is unusable. See the MOS Note Example of Script to Maintain Partitioned Indexes (Doc ID 166755.1).',
        'If a Plan references an index with unusable partitions then this Plan cannot be generated by the CBO.<br>'||CHR(10)||
-       'If you need to enable tha Plan that references this index you need to rebuild the unusable partitions first.'
+       'If you need to enable tha Plan that references this index you need to rebuild the unusable partitions first.', 87
   FROM plan_table pt,
        dba_indexes i,
        dba_ind_partitions p
@@ -1215,12 +1279,13 @@ SELECT DISTINCT :E_INDEX, 'INDEX', SYSTIMESTAMP, pt.object_owner||'.'||pt.object
    AND pt.object_name = p.index_name
    AND p.status = 'UNUSABLE';
 
+-- (062)
 -- index in plan has now unusable subpartitions
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT DISTINCT :E_INDEX, 'INDEX', SYSTIMESTAMP, pt.object_owner||'.'||pt.object_name,
-       'Index referenced by an Execution Plan has now unusable subpartitions.',
+       'Check why the sub-partitioned index referenced by the Execution Plan is unusable. has now unusable subpartitions. Also see Oracle 12c In-memory Performance issue when there are partitions/subpartitons indexes marked unusable (Doc ID 2106224.1).',
        'If a Plan references an index with unusable subpartitions then this Plan cannot be generated by the CBO.<br>'||CHR(10)||
-       'If you need to enable tha Plan that references this index you need to rebuild the unusable subpartitions first.'
+       'If you need to enable tha Plan that references this index you need to rebuild the unusable subpartitions first.', 85
   FROM plan_table pt,
        dba_indexes i,
        dba_ind_subpartitions p
@@ -1234,12 +1299,13 @@ SELECT DISTINCT :E_INDEX, 'INDEX', SYSTIMESTAMP, pt.object_owner||'.'||pt.object
    AND pt.object_name = p.index_name
    AND p.status = 'UNUSABLE';
 
+-- (063)
 -- index in plan is now invisible
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT DISTINCT :E_INDEX, 'INDEX', SYSTIMESTAMP, pt.object_owner||'.'||pt.object_name,
-       'Index referenced by an Execution Plan is now invisible.',
+       'Check to see if it is applicable for the index referenced in the execution plan is invisible. See MOS Note Diagnosing and Understanding Why a Query is Not Using an Index (Doc ID 67522.1).',
        'If a Plan references an invisible index then this Plan cannot be generated by the CBO.<br>'||CHR(10)||
-       'If you need to enable tha Plan that references this index you need to make this index visible.'
+       'If you need to enable tha Plan that references this index you need to make this index visible.', 89
   FROM plan_table pt,
        dba_indexes i
  WHERE :health_checks = 'Y'
@@ -1250,11 +1316,12 @@ SELECT DISTINCT :E_INDEX, 'INDEX', SYSTIMESTAMP, pt.object_owner||'.'||pt.object
    AND i.partitioned = 'NO'
    AND i.visibility = 'INVISIBLE';
 
+-- (064)
 -- unusable indexes
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_GLOBAL, 'INDEX', SYSTIMESTAMP, 'UNUSABLE',
-       'There are '||COUNT(*)||' unusable index(es) in tables being accessed by your SQL.',
-       'Unusable indexes cannot be used by the CBO. This may cause Execution Plans to change.'
+       'Check why the '||COUNT(*)||' unusable index(es) in tables being accessed by your SQL are unusable. Also see the MOS Note Diagnosing and Understanding Why a Query is Not Using an Index (Doc ID 67522.1).',
+       'Unusable indexes cannot be used by the CBO. This may cause Execution Plans to change.', 91
   FROM plan_table pt,
        dba_indexes i
  WHERE :health_checks = 'Y'
@@ -1265,11 +1332,12 @@ SELECT :E_GLOBAL, 'INDEX', SYSTIMESTAMP, 'UNUSABLE',
    AND i.status = 'UNUSABLE'
 HAVING COUNT(*) > 0;
 
+-- (065)
 -- unusable index partitions
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_GLOBAL, 'INDEX PARTITION', SYSTIMESTAMP, 'UNUSABLE',
-       'There are '||COUNT(*)||' unusable index partition(s) in tables being accessed by your SQL.',
-       'Unusable index partitions cannot be used by the CBO. This may cause Execution Plans to change.'
+       'Check why the '||COUNT(*)||' unusable index partition(s) in tables being accessed by your SQL is/are unusable. Also see MOS Note Diagnosing and Understanding Why a Query is Not Using an Index (Doc ID 67522.1).',
+       'Unusable index partitions cannot be used by the CBO. This may cause Execution Plans to change.', 91
   FROM plan_table pt,
        dba_indexes i,
        dba_ind_partitions p
@@ -1283,11 +1351,12 @@ SELECT :E_GLOBAL, 'INDEX PARTITION', SYSTIMESTAMP, 'UNUSABLE',
    AND p.status = 'UNUSABLE'
 HAVING COUNT(*) > 0;
 
+-- (066)
 -- unusable index subpartitions
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_GLOBAL, 'INDEX SUBPARTITION', SYSTIMESTAMP, 'UNUSABLE',
-       'There are '||COUNT(*)||' unusable index subpartition(s) in tables being accessed by your SQL.',
-       'Unusable index subpartitions cannot be used by the CBO. This may cause Execution Plans to change.'
+       'Check why the '||COUNT(*)||' unusable index subpartition(s) in tables being accessed by your SQL is/are unusable. Also see MOS Note Diagnosing and Understanding Why a Query is Not Using an Index (Doc ID 67522.1).',
+       'Unusable index subpartitions cannot be used by the CBO. This may cause Execution Plans to change.', 90
   FROM plan_table pt,
        dba_indexes i,
        dba_ind_subpartitions sp
@@ -1301,11 +1370,12 @@ SELECT :E_GLOBAL, 'INDEX SUBPARTITION', SYSTIMESTAMP, 'UNUSABLE',
    AND sp.status = 'UNUSABLE'
 HAVING COUNT(*) > 0;
 
+-- (067)
 -- invisible indexes
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_GLOBAL, 'INDEX', SYSTIMESTAMP, 'INVISIBLE',
-       'There are '||COUNT(*)||' invisible index(es) in tables being accessed by your SQL.',
-       'Invisible indexes cannot be used by the CBO. This may cause Execution Plans to change.'
+       'Check why the '||COUNT(*)||' index(es) in tables being accessed by your SQL are invisible. Also see MOS Note Diagnosing and Understanding Why a Query is Not Using an Index (Doc ID 67522.1).',
+       'Invisible indexes cannot be used by the CBO. This may cause Execution Plans to change.', 90
   FROM plan_table pt,
        dba_indexes i
  WHERE :health_checks = 'Y'
@@ -1321,11 +1391,12 @@ HAVING COUNT(*) > 0;
  *
  * ------------------------- */
 
+-- (076)
 -- empty_blocks > blocks
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_TABLE, 'TABLE', SYSTIMESTAMP, pt.object_owner||'.'||pt.object_name,
-       'Table has more empty blocks ('||t.empty_blocks||') than actual blocks ('||t.blocks||') according to CBO statistics.',
-       'Review Table statistics and consider re-organizing this Table.'
+       'Check if the table(s) in this query is a rebuild candidate(s). It has more empty blocks ('||t.empty_blocks||') than actual blocks ('||t.blocks||'). Also see MOS Note Index Rebuild, the Need vs the Implications (Doc ID 989093.1).',
+       'Review Table statistics and consider re-organizing this Table.', 38
   FROM plan_table pt,
        dba_tables t
  WHERE :health_checks = 'Y'
@@ -1334,12 +1405,12 @@ SELECT :E_TABLE, 'TABLE', SYSTIMESTAMP, pt.object_owner||'.'||pt.object_name,
    AND pt.object_name = t.table_name
    AND t.empty_blocks > t.blocks;
 
--- table dop is set
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+-- (078)table dop is set
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_TABLE, 'TABLE', SYSTIMESTAMP, pt.object_owner||'.'||pt.object_name,
-       'Table''s DOP is "'||TRIM(t.degree)||'".',
+       'Confirm that the DOP set on table(s) in this query are appropriate. Table''s DOP is "'||TRIM(t.degree)||'". See MOS Note Table-level PARALLEL hint may give wrong DOP or ORA-12850 without fix for Bug 21612531; ORA-7445 in kkfdDegreeLimit() with fix present (Doc ID 2286868.1).',
        'Degree of parallelism greater than 1 may cause parallel-execution PX plans.<br>'||CHR(10)||
-       'Review table properties and execute "ALTER TABLE '||pt.object_owner||'.'||pt.object_name||' NOPARALLEL" to reset degree of parallelism to 1 if PX plans are not desired.'
+       'Review table properties and execute "ALTER TABLE '||pt.object_owner||'.'||pt.object_name||' NOPARALLEL" to reset degree of parallelism to 1 if PX plans are not desired.',46
   FROM plan_table pt,
        dba_tables t
  WHERE :health_checks = 'Y'
@@ -1348,12 +1419,13 @@ SELECT :E_TABLE, 'TABLE', SYSTIMESTAMP, pt.object_owner||'.'||pt.object_name,
    AND pt.object_name = t.table_name
    AND TRIM(t.degree) NOT IN ('0', '1', 'DEFAULT');
 
+-- (079)
 -- table has indexes with dop set
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_TABLE, 'TABLE', SYSTIMESTAMP, pt.object_owner||'.'||pt.object_name,
-       'Table has '||COUNT(*)||' index(es) with DOP greater than 1.',
+       'Check the DEGREE setting on some index(es). '||COUNT(*)||' index(es) with DOP other than 1. See MOS Note DEGREE column in DBA_INDEXES has the value DEFAULT instead of number (Doc ID 1620092.1).',
        'Degree of parallelism greater than 1 may cause parallel-execution PX plans.<br>'||CHR(10)||
-       'Review index properties and execute "ALTER INDEX index_name NOPARALLEL" to reset degree of parallelism to 1 if PX plans are not desired.'
+       'Review index properties and execute "ALTER INDEX index_name NOPARALLEL" to reset degree of parallelism to 1 if PX plans are not desired.',79
   FROM plan_table pt,
        dba_indexes i
  WHERE :health_checks = 'Y'
@@ -1365,12 +1437,13 @@ SELECT :E_TABLE, 'TABLE', SYSTIMESTAMP, pt.object_owner||'.'||pt.object_name,
        pt.object_owner,
        pt.object_name;
 
+-- (080)
 -- index degree <> table degree
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_TABLE, 'TABLE', SYSTIMESTAMP, pt.object_owner||'.'||pt.object_name,
        'Table has '||COUNT(*)||' index(es) with DOP different than its table.',
        'Table has a degree of parallelism of "'||TRIM(t.degree)||'".<br>'||CHR(10)||
-       'Review index properties and fix degree of parallelism of table and/or its index(es).'
+       'Review index properties and fix degree of parallelism of table and/or its index(es).', 1
   FROM plan_table pt,
        dba_tables t,
        dba_indexes i
@@ -1386,8 +1459,9 @@ SELECT :E_TABLE, 'TABLE', SYSTIMESTAMP, pt.object_owner||'.'||pt.object_name,
        pt.object_name,
        TRIM(t.degree);
 
+-- (081)
 -- no stats
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_TABLE, 'TABLE', SYSTIMESTAMP, pt.object_owner||'.'||pt.object_name,
        'Table lacks CBO Statistics.',
        CASE
@@ -1403,7 +1477,7 @@ SELECT :E_TABLE, 'TABLE', SYSTIMESTAMP, pt.object_owner||'.'||pt.object_name,
          ELSE
            'Consider gathering table statistics using DBMS_STATS.GATHER_TABLE_STATS.'||CHR(10)||
            'See <a target="MOS" href="^^doc_link.465787.1">465787.1</a>.'
-         END
+         END, 100
   FROM plan_table pt,
        dba_tables t
  WHERE :health_checks = 'Y'
@@ -1413,8 +1487,9 @@ SELECT :E_TABLE, 'TABLE', SYSTIMESTAMP, pt.object_owner||'.'||pt.object_name,
    AND t.temporary = 'N'
    AND (t.last_analyzed IS NULL OR t.num_rows IS NULL);
 
+-- (082)
 -- no rows
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_TABLE, 'TABLE', SYSTIMESTAMP, pt.object_owner||'.'||pt.object_name,
        'Number of rows equal to zero according to table''s CBO statistics.',
        CASE
@@ -1433,7 +1508,7 @@ SELECT :E_TABLE, 'TABLE', SYSTIMESTAMP, pt.object_owner||'.'||pt.object_name,
          ELSE
            'Consider gathering table statistics using DBMS_STATS.GATHER_TABLE_STATS.'||CHR(10)||
            'See <a target="MOS" href="^^doc_link.465787.1">465787.1</a>.'
-         END
+         END, 70
   FROM plan_table pt,
        dba_tables t
  WHERE :health_checks = 'Y'
@@ -1442,12 +1517,13 @@ SELECT :E_TABLE, 'TABLE', SYSTIMESTAMP, pt.object_owner||'.'||pt.object_name,
    AND pt.object_name = t.table_name
    AND t.num_rows = 0;
 
+-- (088)
 -- siebel small tables with CBO statistics
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_TABLE, 'TABLE', SYSTIMESTAMP, pt.object_owner||'.'||pt.object_name,
-       'Small table with CBO statistics.',
+       'Review your statistics collection for Siebel against the MOS Note Performance Tuning Guidelines for Siebel CRM Application on Oracle Database (Doc ID 2077227.2). See the script coe_siebel_stats_11_4_6.sql. Small tables should not have SQL statistics.',
        'Consider deleting table statistics on this small table using DBMS_STATS.DELETE_TABLE_STATS.<br>'||CHR(10)||
-       'See <a target="MOS" href="^^doc_link.781927.1">781927.1</a>.'
+       'See <a target="MOS" href="^^doc_link.781927.1">781927.1</a>.', 68
   FROM plan_table pt,
        dba_tables t
  WHERE :health_checks = 'Y'
@@ -1457,12 +1533,13 @@ SELECT :E_TABLE, 'TABLE', SYSTIMESTAMP, pt.object_owner||'.'||pt.object_name,
    AND pt.object_name = t.table_name
    AND t.num_rows < 15;
 
+-- (090)
 -- small sample size
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_TABLE, 'TABLE', SYSTIMESTAMP, v.object_owner||'.'||v.object_name,
-       'Sample size of '||v.sample_size||' rows may be too small for table with '||v.num_rows||' rows.',
+       'Check your statistics collection procedures and compare them to the best practices in MOS Note Best Practices for Automatic Statistics Collection (Doc ID 377152.1). Sample size of '||v.sample_size||' rows is too small for table with '||v.num_rows||' rows.',
        'Sample percent used was:'||TRIM(TO_CHAR(ROUND(v.ratio * 100, 2), '99999990D00'))||'%.<br>'||CHR(10)||
-       'Consider gathering better quality table statistics with DBMS_STATS.AUTO_SAMPLE_SIZE on 11g or with a sample size of '||ROUND(v.factor * 100)||'% on 10g.'
+       'Consider gathering better quality table statistics with DBMS_STATS.AUTO_SAMPLE_SIZE on 11g or with a sample size of '||ROUND(v.factor * 100)||'% on 10g.', 50
   FROM (
 SELECT pt.object_owner,
        pt.object_name,
@@ -1493,12 +1570,13 @@ SELECT pt.object_owner,
  WHERE :health_checks = 'Y'
    AND v.ratio < (9/10) * v.factor;
 
+-- (091)
 -- old stats
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_TABLE, 'TABLE', SYSTIMESTAMP, v.object_owner||'.'||v.object_name,
-       'Table CBO statistics are '||ROUND(SYSDATE - v.last_analyzed)||' days old: '||TO_CHAR(v.last_analyzed, 'YYYY-MM-DD/HH24:MI:SS')||'.',
+       'Check your statistics collection procedures and compare them to the best practices in MOS Note Best Practices for Automatic Statistics Collection (Doc ID 377152.1). Table CBO statistics are '||ROUND(SYSDATE - v.last_analyzed)||' days old. Gathered: '||TO_CHAR(v.last_analyzed, 'YYYY-MM-DD/HH24:MI:SS')||'.',
        'Consider gathering better quality table statistics with DBMS_STATS.AUTO_SAMPLE_SIZE on 11g or with a sample size of '||ROUND(v.factor * 100)||'% on 10g.<br>'||CHR(10)||
-       'Old statistics could contain low/high values for which a predicate may be out of range, producing then a poor plan.'
+       'Old statistics could contain low/high values for which a predicate may be out of range, producing then a poor plan.', 56
   FROM (
 SELECT pt.object_owner,
        pt.object_name,
@@ -1535,12 +1613,13 @@ SELECT pt.object_owner,
     OR (v.num_rows BETWEEN 1e8 AND 1e9 AND v.last_analyzed < SYSDATE - 42));
 
 
+-- (092)
 -- extended statistics
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_TABLE, 'TABLE', SYSTIMESTAMP, pt.object_owner||'.'||pt.object_name,
-       'Table has '||COUNT(*)||' CBO statistics extension(s).',
+       'Check the applicability of the Extended Statistics found on the table(s) in this query. Also see MOS Note How To Find Candidate Columns For Creating Extended Statistics Using "DBMS_STATS.SEED_COL_USAGE" (Doc ID 1430317.1). Table has '||COUNT(*)||' CBO statistics extension(s).',
        'Review table statistics extensions. Extensions can be used for expressions or column groups.<br>'||CHR(10)||
-       'If your SQL contain matching predicates these extensions can influence the CBO.'
+       'If your SQL contain matching predicates these extensions can influence the CBO.', 12
   FROM plan_table pt,
        dba_stat_extensions e
  WHERE :health_checks = 'Y'
@@ -1551,8 +1630,9 @@ SELECT :E_TABLE, 'TABLE', SYSTIMESTAMP, pt.object_owner||'.'||pt.object_name,
        pt.object_owner,
        pt.object_name;
 
+-- (094)
 -- columns with no stats
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_TABLE, 'TABLE', SYSTIMESTAMP, pt.object_owner||'.'||pt.object_name,
        'Contains '||COUNT(*)||' column(s) with missing CBO statistics.',
        CASE
@@ -1568,7 +1648,7 @@ SELECT :E_TABLE, 'TABLE', SYSTIMESTAMP, pt.object_owner||'.'||pt.object_name,
          ELSE
            'Consider gathering table statistics using DBMS_STATS.GATHER_TABLE_STATS.'||CHR(10)||
            'See <a target="MOS" href="^^doc_link.465787.1">465787.1</a>.'
-         END
+         END, 67
   FROM plan_table pt,
        dba_tables t,
        dba_tab_cols c
@@ -1585,13 +1665,14 @@ SELECT :E_TABLE, 'TABLE', SYSTIMESTAMP, pt.object_owner||'.'||pt.object_name,
        pt.object_owner,
        pt.object_name;
 
+-- (095)
 -- columns missing low/high values
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_TABLE, 'TABLE', SYSTIMESTAMP, pt.object_owner||'.'||pt.object_name,
-       'Contains '||COUNT(*)||' column(s) with null low/high values.',
+       'Check why there are '||COUNT(*)||' column(s) referenced in predicates with null low/high values. See MOS Note Best Practices for Automatic Statistics Collection (Doc ID 377152.1).',
        'CBO cannot compute correct selectivity with these column statistics missing.<br>'||CHR(10)||
        'You may possibly have Bug <a target="MOS" href="^^bug_link.10248781">10248781</a><br>'||CHR(10)||
-       'Consider gathering statistics for this table.'
+       'Consider gathering statistics for this table.', 73
   FROM plan_table pt,
        dba_tables t,
        dba_tab_cols c
@@ -1610,12 +1691,13 @@ SELECT :E_TABLE, 'TABLE', SYSTIMESTAMP, pt.object_owner||'.'||pt.object_name,
        pt.object_owner,
        pt.object_name;
 
+-- (096)
 -- columns with old stats
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_TABLE, 'TABLE', SYSTIMESTAMP, v.object_owner||'.'||v.object_name,
-       'Table contains column(s) with outdated CBO statistics for up to '||TRUNC(ABS(v.tbl_last_analyzed - v.col_last_analyzed))||' day(s).',
+       'Consider the applicability of the statistics on the table as it contains columns with outdated CBO statistics for up to '||TRUNC(ABS(v.tbl_last_analyzed - v.col_last_analyzed))||' day(s). Also see Best Practices for Automatic Statistics Collection (Doc ID 377152.1).',
        'CBO table and column statistics are inconsistent. Consider gathering statistics for this table.<br>'||CHR(10)||
-       'Old statistics could contain low/high values for which a predicate may be out of range, producing then a poor plan.'
+       'Old statistics could contain low/high values for which a predicate may be out of range, producing then a poor plan.', 30
   FROM (
 SELECT pt.object_owner,
        pt.object_name,
@@ -1640,13 +1722,14 @@ SELECT pt.object_owner,
  WHERE :health_checks = 'Y'
    AND ABS(v.tbl_last_analyzed - v.col_last_analyzed) > 1;
 
+-- (097)
 -- more nulls than rows
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_TABLE, 'TABLE', SYSTIMESTAMP, v.object_owner||'.'||v.object_name,
-       'Number of nulls greater than number of rows by more than 10% in '||v.col_count||' column(s).',
+       'Find out why statistics are wrong and collect fresh statisitics if needed. The number of nulls is greater than number of rows by more than 10% in '||v.col_count||' column(s). Also see MOS Note Best Practices for Automatic Statistics Collection (Doc ID 377152.1).',
        'There cannot be more rows with null value in a column than actual rows in the table.<br>'||CHR(10)||
        'Worst column shows '||v.num_nulls||' nulls while table has '||v.tbl_num_rows||' rows.<br>'||CHR(10)||
-       'CBO table and column statistics are inconsistent. Consider gathering statistics for this table using a large sample size.'
+       'CBO table and column statistics are inconsistent. Consider gathering statistics for this table using a large sample size.', 30
   FROM (
 SELECT pt.object_owner,
        pt.object_name,
@@ -1673,13 +1756,14 @@ SELECT pt.object_owner,
  WHERE :health_checks = 'Y'
    AND v.col_count > 0;
 
+-- (098)
 -- more distinct values than rows
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_TABLE, 'TABLE', SYSTIMESTAMP, v.object_owner||'.'||v.object_name,
-       'Number of distinct values greater than number of rows by more than 10% in '||v.col_count||' column(s).',
+       'Find out why statisitcs are wrong and consider collecting fresh statistics if needed. The number of distinct values is greater than number or rows by more than 10% in '||v.col_count||' column(s). Also see MOS Note Best Practices for Automatic Statistics Collection (Doc ID 377152.1).',
        'There cannot be a larger number of distinct values in a column than actual rows in the table.<br>'||CHR(10)||
        'Worst column shows '||v.num_distinct||' distinct values while table has '||v.tbl_num_rows||' rows.<br>'||CHR(10)||
-       'CBO table and column statistics are inconsistent. Consider gathering statistics for this table using a large sample size.'
+       'CBO table and column statistics are inconsistent. Consider gathering statistics for this table using a large sample size.', 80
   FROM (
 SELECT pt.object_owner,
        pt.object_name,
@@ -1706,13 +1790,14 @@ SELECT pt.object_owner,
  WHERE :health_checks = 'Y'
    AND v.col_count > 0;
 
+-- (099)
 -- zero distinct values on columns with value
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_TABLE, 'TABLE', SYSTIMESTAMP, v.object_owner||'.'||v.object_name,
-       'Number of distinct values is zero in at least '||v.col_count||' column(s) with value.',
+       'Find out why statistics are wrong and consider collecting fresh statistics if needed. Number of distinct values is zero in at least '||v.col_count||' column(s) with value. Also see MOS Note Best Practices for Automatic Statistics Collection (Doc ID 377152.1).',
        'There should not be columns with value ((num_rows - num_nulls) greater than 0) where the number of distinct values for the same column is zero.<br>'||CHR(10)||
        'Worst column shows '||(v.tbl_num_rows - v.num_nulls)||' rows with value while the number of distinct values for it is zero.<br>'||CHR(10)||
-       'CBO table and column statistics are inconsistent. Consider gathering statistics for this table using a large sample size.'
+       'CBO table and column statistics are inconsistent. Consider gathering statistics for this table using a large sample size.', 80
   FROM (
 SELECT pt.object_owner,
        pt.object_name,
@@ -1740,15 +1825,16 @@ SELECT pt.object_owner,
  WHERE :health_checks = 'Y'
    AND v.col_count > 0;
 
+-- (142) 
 -- 9885553 incorrect NDV in long char column with histogram
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_TABLE, 'TABLE', SYSTIMESTAMP, v.object_owner||'.'||v.object_name,
-       'Table contains '||v.col_count||' long CHAR column(s) with Histogram. Number of distinct values (NDV) could be incorrect.',
+       'Check for the applicability of bug 9885553 as a Long CHAR column with Histogram is referenced ('||v.col_count||' long CHAR column(s) with Histogram) in at least one Predicate. NDV could be incorrect. See MOS Note Bug 9885553 - DBMS_STATS produces incorrect column NDV distinct values statistics (Doc ID 9885553.8).',
        'Possible Bug <a target="MOS" href="^^bug_link.9885553">9885553</a>.<br>'||CHR(10)||
        'When building histogram for a varchar column that is long, we only use its first 32 characters.<br>'||CHR(10)||
        'Two distinct values that share the same first 32 characters are deemed the same in the histogram.<br>'||CHR(10)||
        'Therefore the NDV derived from the histogram is inaccurate.'||CHR(10)||
-       'If NDV is wrong then drop the Histogram.'
+       'If NDV is wrong then drop the Histogram.', 60
   FROM (
 SELECT pt.object_owner,
        pt.object_name,
@@ -1770,13 +1856,14 @@ SELECT pt.object_owner,
  WHERE :health_checks = 'Y'
    AND v.col_count > 0;
 
+-- (103)
 -- 10174050 frequency histograms with less buckets than NDV
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_TABLE, 'TABLE', SYSTIMESTAMP, v.object_owner||'.'||v.object_name,
-       'Table contains '||v.col_count||' column(s) where the number of distinct values does not match the number of buckets.',
+       'Check the applicability of Bug 10174050. This may cause missing values from Frequency histograms. Table contains '||v.col_count||' column(s) referenced in predicates where the number of distinct values does not match the number of buckets. Also see MOS Note Unexpected Poor Execution Plan When Non-Popular Value Missing from Histogram (Doc ID 1563752.1).',
        'Review column statistics for this table and look for "Num Distinct" and "Num Buckets". If there are values missing from the frequency histogram you may have Bug <a target="MOS" href="^^bug_link.10174050">10174050</a>.<br>'||CHR(10)||
        'If you are referencing in your predicates one of the missing values the CBO can over estimate table cardinality, and this may produce a sub-optimal plan.<br>'||CHR(10)||
-       'You can either gather statistics with 100% or as a workaround: ALTER system/session "_fix_control"=''5483301:OFF'';'
+       'You can either gather statistics with 100% or as a workaround: ALTER system/session "_fix_control"=''5483301:OFF'';', 76
   FROM (
 SELECT pt.object_owner,
        pt.object_name,
@@ -1795,10 +1882,11 @@ SELECT pt.object_owner,
  WHERE :health_checks = 'Y'
    AND v.col_count > 0;
 
+-- (104)
 -- frequency histogram with 1 bucket
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_TABLE, 'TABLE', SYSTIMESTAMP, v.object_owner||'.'||v.object_name,
-       'Table contains '||v.col_count||' column(s) where the number of buckets is 1 for a "FREQUENCY" histogram.',
+       'Check the applicability of bugs 1386119, 4406309, 4495422, 4567767, 5483301 or 6082745. Table contains '||v.col_count||' column(s) referenced in predicates where the number of buckets is 1 for a "FREQUENCY" histogram.',
        'Review column statistics for this table and look for "Num Buckets" and "Histogram". Possible Bugs '||
        '<a target="MOS" href="^^bug_link.1386119">1386119</a>, '||
        '<a target="MOS" href="^^bug_link.4406309">4406309</a>, '||
@@ -1807,7 +1895,7 @@ SELECT :E_TABLE, 'TABLE', SYSTIMESTAMP, v.object_owner||'.'||v.object_name,
        '<a target="MOS" href="^^bug_link.5483301">5483301</a> or '||
        '<a target="MOS" href="^^bug_link.6082745">6082745</a>.<br>'||CHR(10)||
        'If you are referencing in your predicates one of the missing values the CBO can over estimate table cardinality, and this may produce a sub-optimal plan.<br>'||CHR(10)||
-       'You can either gather statistics with 100% or as a workaround: ALTER system/session "_fix_control"=''5483301:OFF'';'
+       'You can either gather statistics with 100% or as a workaround: ALTER system/session "_fix_control"=''5483301:OFF'';', 20
   FROM (
 SELECT pt.object_owner,
        pt.object_name,
@@ -1826,11 +1914,12 @@ SELECT pt.object_owner,
  WHERE :health_checks = 'Y'
    AND v.col_count > 0;
 
+-- (105)
 -- height balanced histogram with no popular values
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_TABLE, 'TABLE', SYSTIMESTAMP, v.object_owner||'.'||v.object_name,
-       'Table contains '||v.col_count||' column(s) with no popular values on a "HEIGHT BALANCED" histogram.',
-       'A Height-balanced histogram with no popular values is not helpful nor desired. Consider dropping this histogram by collecting new CBO statistics while using METHOD_OPT with SIZE 1.'
+       'Check the correctness of the histogram on columns referenced in predicates for this query. Table contains '||v.col_count||' column(s) referenced in predicates with no popular values on a "HEIGHT BALANCED" histogram. Also see MOS Note Interpreting Histogram Information (Doc ID 72539.1).',
+       'A Height-balanced histogram with no popular values is not helpful nor desired. Consider dropping this histogram by collecting new CBO statistics while using METHOD_OPT with SIZE 1.', 32
   FROM (
 SELECT pt.object_owner,
        pt.object_name,
@@ -1855,15 +1944,16 @@ SELECT pt.object_owner,
  WHERE :health_checks = 'Y'
    AND v.col_count > 0;
 
+-- (144)
 -- 8543770 corrupted histogram
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_TABLE, 'TABLE', SYSTIMESTAMP, v.object_owner||'.'||v.object_name,
-       'Table contains '||v.col_count||' column(s) with corrupted histogram.',
+       'Check the correctness of the histograms. There appear to be '||v.col_count||' corrupted histogram(s). See Bug 8543770 - ORA-39083 / ORA-1403 from IMPDP on INDEX_STATISTICS (Doc ID 8543770.8) and bugs 0267075, 12819221 and 12876988.',
        'These columns have buckets with values out of order. Consider dropping those histogram by collecting new CBO statistics while using METHOD_OPT with SIZE 1. Possible Bugs '||
        '<a target="MOS" href="^^bug_link.8543770">8543770</a>, '||
        '<a target="MOS" href="^^bug_link.10267075">10267075</a>, '||
        '<a target="MOS" href="^^bug_link.12819221">12819221</a> or '||
-       '<a target="MOS" href="^^bug_link.12876988">12876988</a>.'
+       '<a target="MOS" href="^^bug_link.12876988">12876988</a>.', 70
   FROM (
 SELECT pt.object_owner,
        pt.object_name,
@@ -1890,28 +1980,29 @@ SELECT pt.object_owner,
  WHERE :health_checks = 'Y'
    AND v.col_count > 0;
 
+-- (134)
 -- analyze 236935.1
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_TABLE, 'TABLE', SYSTIMESTAMP, pt.object_owner||'.'||pt.object_name,
        'CBO statistics were gathered using deprecated ANALYZE command.',
        CASE
          WHEN '^^is_ebs.' = 'Y' THEN
-           'When ANALYZE is used on a non-partitioned table, the global_stats column of the table statistics receives a value of ''NO''.<br>'||CHR(10)||
+           'Use FND_STATS to collect statistics. When ANALYZE is used on a non-partitioned table, the global_stats column of the table statistics receives a value of ''NO''.<br>'||CHR(10)||
            'Consider gathering statistics using FND_STATS instead.<br>'||CHR(10)||
            'See also <a target="MOS" href="^^doc_link.156968.1">156968.1</a>.'
          WHEN '^^is_siebel.' = 'Y' THEN
-           'When ANALYZE is used on a non-partitioned table, the global_stats column of the table statistics receives a value of ''NO''.<br>'||CHR(10)||
+           'Use coe_siebel_stats.sql to collect statistics. When ANALYZE is used on a non-partitioned table, the global_stats column of the table statistics receives a value of ''NO''.<br>'||CHR(10)||
            'Consider gathering statistics using coe_siebel_stats.sql instead.<br>'||CHR(10)||
            'See <a target="MOS" href="^^doc_link.781927.1">781927.1</a>.'
          WHEN '^^is_psft.' = 'Y' THEN
-           'When ANALYZE is used on a non-partitioned table, the global_stats column of the table statistics receives a value of ''NO''.<br>'||CHR(10)||
+           'Use pscbo_stats.sql to gather statistics. When ANALYZE is used on a non-partitioned table, the global_stats column of the table statistics receives a value of ''NO''.<br>'||CHR(10)||
            'Consider gathering statistics using pscbo_stats.sql instead.<br>'||CHR(10)||
            'See <a target="MOS" href="^^doc_link.1322888.1">1322888.1</a>.'
          ELSE
-           'When ANALYZE is used on a non-partitioned table, the global_stats column of the table statistics receives a value of ''NO''.<br>'||CHR(10)||
+           'Use dbms_stats to gather statistics. When ANALYZE is used on a non-partitioned table, the global_stats column of the table statistics receives a value of ''NO''.<br>'||CHR(10)||
            'Consider gathering statistics using DBMS_STATS instead.<br>'||CHR(10)||
            'See <a target="MOS" href="^^doc_link.465787.1">465787.1</a>.'
-         END
+         END, 64
   FROM plan_table pt,
        dba_tables t
  WHERE :health_checks = 'Y'
@@ -1923,28 +2014,29 @@ SELECT :E_TABLE, 'TABLE', SYSTIMESTAMP, pt.object_owner||'.'||pt.object_name,
    AND t.partitioned = 'NO'
    AND t.global_stats = 'NO';
 
+-- (127)
 -- derived stats
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_TABLE, 'TABLE', SYSTIMESTAMP, pt.object_owner||'.'||pt.object_name,
-       'CBO statistics are being derived by aggregation from lower level objects.',
+       'Use the appropriate method to gather statistics. CBO statistics are being derived by aggregation from lower level objects.',
        CASE
          WHEN '^^is_ebs.' = 'Y' THEN
-           'When statistics are derived by aggregation from lower level objects, the global_stats column of the table statistics receives a value of ''NO''.<br>'||CHR(10)||
+           'Use FND_STATS to gather statistics. When statistics are derived by aggregation from lower level objects, the global_stats column of the table statistics receives a value of ''NO''.<br>'||CHR(10)||
            'Consider gathering statistics using FND_STATS instead.<br>'||CHR(10)||
            'See also <a target="MOS" href="^^doc_link.156968.1">156968.1</a>.'
          WHEN '^^is_siebel.' = 'Y' THEN
-           'When statistics are derived by aggregation from lower level objects, the global_stats column of the table statistics receives a value of ''NO''.<br>'||CHR(10)||
+           'Use coe_siebel_stats to gather statistics. When statistics are derived by aggregation from lower level objects, the global_stats column of the table statistics receives a value of ''NO''.<br>'||CHR(10)||
            'Consider gathering statistics using coe_siebel_stats.sql instead.<br>'||CHR(10)||
            'See <a target="MOS" href="^^doc_link.781927.1">781927.1</a>.'
          WHEN '^^is_psft.' = 'Y' THEN
-           'When statistics are derived by aggregation from lower level objects, the global_stats column of the table statistics receives a value of ''NO''.<br>'||CHR(10)||
+           'Use pscbo_stats.sql to gather statistics. When statistics are derived by aggregation from lower level objects, the global_stats column of the table statistics receives a value of ''NO''.<br>'||CHR(10)||
            'Consider gathering statistics using pscbo_stats.sql instead.<br>'||CHR(10)||
            'See <a target="MOS" href="^^doc_link.1322888.1">1322888.1</a>.'
          ELSE
-           'When statistics are derived by aggregation from lower level objects, the global_stats column of the table statistics receives a value of ''NO''.<br>'||CHR(10)||
+           'Use dbms_stats to gather statistics. When statistics are derived by aggregation from lower level objects, the global_stats column of the table statistics receives a value of ''NO''.<br>'||CHR(10)||
            'Consider gathering statistics using DBMS_STATS instead.<br>'||CHR(10)||
            'See <a target="MOS" href="^^doc_link.465787.1">465787.1</a>.'
-         END
+         END, 71
   FROM plan_table pt,
        dba_tables t
  WHERE :health_checks = 'Y'
@@ -1956,10 +2048,11 @@ SELECT :E_TABLE, 'TABLE', SYSTIMESTAMP, pt.object_owner||'.'||pt.object_name,
    AND t.partitioned = 'YES'
    AND t.global_stats = 'NO';
 
+-- (049)
 -- tables with stale statistics
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_TABLE, 'TABLE', SYSTIMESTAMP, pt.object_owner||'.'||pt.object_name,
-       'Table has stale statistics.',
+       'Table has stale statistics. See MOS Note Script that Checks for Schemas Containing Stale Statistics (Doc ID 560336.1)',
        CASE
          WHEN '^^is_ebs.' = 'Y' THEN
            'Consider gathering table statistics using FND_STATS.GATHER_TABLE_STATS or coe_stats.sql.<br>'||CHR(10)||
@@ -1973,7 +2066,7 @@ SELECT :E_TABLE, 'TABLE', SYSTIMESTAMP, pt.object_owner||'.'||pt.object_name,
          ELSE
            'Consider gathering table statistics using DBMS_STATS.GATHER_TABLE_STATS.'||CHR(10)||
            'See <a target="MOS" href="^^doc_link.465787.1">465787.1</a>.'
-         END
+         END, 83
   FROM plan_table pt,
        dba_tab_statistics t
  WHERE :health_checks = 'Y'
@@ -1983,11 +2076,12 @@ SELECT :E_TABLE, 'TABLE', SYSTIMESTAMP, pt.object_owner||'.'||pt.object_name,
    AND t.object_type = 'TABLE'
    AND t.stale_stats = 'YES';
 
+-- (050)
 -- tables with locked statistics
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_TABLE, 'TABLE', SYSTIMESTAMP, pt.object_owner||'.'||pt.object_name,
-       'Table has locked statistics.',
-       'Review table statistics.'
+       'Check the applicability of locked statistics on the table. See MOS Note FAQ: Statistics Gathering Frequently Asked Questions (Doc ID 1501712.1).',
+       'Review table statistics.', 48
   FROM plan_table pt,
        dba_tab_statistics t
  WHERE :health_checks = 'Y'
@@ -1997,11 +2091,12 @@ SELECT :E_TABLE, 'TABLE', SYSTIMESTAMP, pt.object_owner||'.'||pt.object_name,
    AND t.object_type = 'TABLE'
    AND t.stattype_locked IN ('ALL', 'DATA');
 
+-- (052)
 -- sql with policies as per dba_policies
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_TABLE, 'DBA_POLICIES', SYSTIMESTAMP, pt.object_owner||'.'||pt.object_name,
-       'Virtual Private Database. There is one or more policies affecting this table.',
-       'Review Execution Plans and look for their injected predicates.'
+       'Check the injected predicates below each individual plan to make sure it is applicable on this Virtual Private Database. See MOS Note How to Investigate Query Performance Regressions Caused by VPD (FGAC) Predicates? (Doc ID 967042.1).',
+       'Review Execution Plans and look for their injected predicates.', 16
   FROM plan_table pt,
        dba_policies p
  WHERE :health_checks = 'Y'
@@ -2016,11 +2111,12 @@ HAVING COUNT(*) > 0
        pt.object_owner,
        pt.object_name;
 
+-- (053)
 -- sql with policies as per dba_audit_policies
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_TABLE, 'DBA_AUDIT_POLICIES', SYSTIMESTAMP, pt.object_owner||'.'||pt.object_name,
-       'Fine-Grained Auditing. There is one or more audit policies affecting this table.',
-       'Review Execution Plans and look for their injected predicates.'
+       'Fine-Grained Auditing. There is one or more audit policies on Tables or Views related to the SQL being analyzed. See MOS Note Performance Issues While Monitoring the Unified Audit Trail of an Oracle12c Database (Doc ID 2063340.1).',
+       'Review Execution Plans and look for their injected predicates.', 8
   FROM plan_table pt,
        dba_audit_policies p
  WHERE :health_checks = 'Y'
@@ -2035,10 +2131,11 @@ HAVING COUNT(*) > 0
        pt.object_owner,
        pt.object_name;
 
+-- (110)
 -- table partitions with no stats
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_TABLE_PART, 'TABLE PARTITION', SYSTIMESTAMP, v.object_owner||'.'||v.object_name,
-       v.no_stats||' out of '||v.par_count||' partition(s) lack(s) CBO statistics.',
+       'Consider collecting valid statistics for the partitioned object'||v.no_stats||' out of '||v.par_count||' partition(s) lack(s) CBO statistics. See MOS Note Automatic Optimizer Statistics Collection on Partitioned Table (Doc ID 1592404.1).',
        CASE
          WHEN '^^is_ebs.' = 'Y' THEN
            'Consider gathering statistics using FND_STATS.GATHER_TABLE_STATISTICS.<br>'||CHR(10)||
@@ -2052,7 +2149,7 @@ SELECT :E_TABLE_PART, 'TABLE PARTITION', SYSTIMESTAMP, v.object_owner||'.'||v.ob
          ELSE
            'Consider gathering statistics using DBMS_STATS.GATHER_TABLE_STATISTICS.<br>'||CHR(10)||
            'See <a target="MOS" href="^^doc_link.465787.1">465787.1</a>.'
-         END
+         END, 39
   FROM (
 SELECT pt.object_owner,
        pt.object_name,
@@ -2076,11 +2173,12 @@ SELECT pt.object_owner,
  WHERE :health_checks = 'Y'
    AND v.no_stats > 0;
 
+-- (111)
 -- table partitions where num rows = 0
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_TABLE_PART, 'TABLE PARTITION', SYSTIMESTAMP, v.object_owner||'.'||v.object_name,
-       v.num_rows_zero||' out of '||v.par_count||' partition(s) with number of rows equal to zero according to partition''s CBO statistics.',
-       'If these table partitions are not empty, consider gathering table statistics using GRANULARITY=>GLOBAL AND PARTITION.'
+       'Check that the statistics on this table partition are correct'||v.num_rows_zero||' out of '||v.par_count||' partition(s) with number of rows equal to zero according to partition''s CBO statistics. See MOS Note Automatic Optimizer Statistics Collection on Partitioned Table (Doc ID 1592404.1).',
+       'If these table partitions are not empty, consider gathering table statistics using GRANULARITY=>GLOBAL AND PARTITION.', 44
   FROM (
 SELECT pt.object_owner,
        pt.object_name,
@@ -2104,12 +2202,13 @@ SELECT pt.object_owner,
  WHERE :health_checks = 'Y'
    AND v.num_rows_zero > 0;
 
+-- (112)
 -- table partitions with outdated stats
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_TABLE_PART, 'TABLE PARTITION', SYSTIMESTAMP, v.object_owner||'.'||v.object_name,
-       'Table contains partition(s) with table/partition CBO statistics out of sync for up to '||TRUNC(ABS(v.tbl_last_analyzed - v.par_last_analyzed))||' day(s).',
+       'Consider collecting fresh statistics as the table contains partition(s) with table/partition CBO statistics out of sync for up to '||TRUNC(ABS(v.tbl_last_analyzed - v.par_last_analyzed))||' day(s). Also see MOS Note Automatic Optimizer Statistics Collection on Partitioned Table (Doc ID 1592404.1).',
        'Table and partition statistics were gathered up to '||TRUNC(ABS(v.tbl_last_analyzed - v.par_last_analyzed))||' day(s) appart, so they do not offer a consistent view to the CBO.<br>'||CHR(10)||
-       'Consider re-gathering table statistics using GRANULARITY=>GLOBAL AND PARTITION.'
+       'Consider re-gathering table statistics using GRANULARITY=>GLOBAL AND PARTITION.', 32
   FROM (
 SELECT pt.object_owner,
        pt.object_name,
@@ -2135,10 +2234,11 @@ SELECT pt.object_owner,
  WHERE :health_checks = 'Y'
    AND ABS(v.tbl_last_analyzed - v.par_last_analyzed) > 1;
 
+-- (113) 
 -- partitions with no column stats
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_TABLE_PART, 'TABLE PARTITION', SYSTIMESTAMP, v.object_owner||'.'||v.object_name,
-       v.no_stats||' column(s) lack(s) partition level CBO statistics.',
+       'Consider gathering statistics on this partitioned table. '||v.no_stats||' column(s) referenced in predicates lack(s) partition level CBO statistics. See MOS Note Automatic Optimizer Statistics Collection on Partitioned Table (Doc ID 1592404.1).',
        CASE
          WHEN '^^is_ebs.' = 'Y' THEN
            'Consider gathering statistics using FND_STATS.GATHER_TABLE_STATISTICS.<br>'||CHR(10)||
@@ -2152,7 +2252,7 @@ SELECT :E_TABLE_PART, 'TABLE PARTITION', SYSTIMESTAMP, v.object_owner||'.'||v.ob
          ELSE
            'Consider gathering statistics using DBMS_STATS.GATHER_TABLE_STATISTICS.<br>'||CHR(10)||
            'See <a target="MOS" href="^^doc_link.465787.1">465787.1</a>.'
-         END
+         END, 43
   FROM (
 SELECT pt.object_owner,
        pt.object_name,
@@ -2177,12 +2277,13 @@ SELECT pt.object_owner,
  WHERE :health_checks = 'Y'
    AND v.no_stats > 0;
 
+-- (114)
 -- partition columns with outdated stats
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_TABLE_PART, 'TABLE PARTITION', SYSTIMESTAMP, v.object_owner||'.'||v.object_name,
-       'Table contains column(s) with table/partition CBO statistics out of sync for up to '||TRUNC(ABS(v.tbl_last_analyzed - v.col_last_analyzed))||' day(s).',
+       'Consider gathering fresh statistics on the table in this query. Table contains column(s) referenced in predicates with table/partition CBO statistics out of sync for up to '||TRUNC(ABS(v.tbl_last_analyzed - v.col_last_analyzed))||' day(s). Also see MOS Note Automatic Optimizer Statistics Collection on Partitioned Table (Doc ID 1592404.1).',
        'Table and partition statistics were gathered up to '||TRUNC(ABS(v.tbl_last_analyzed - v.col_last_analyzed))||' day(s) appart, so they do not offer a consistent view to the CBO.<br>'||CHR(10)||
-       'Consider re-gathering table statistics using GRANULARITY=>GLOBAL AND PARTITION.'
+       'Consider re-gathering table statistics using GRANULARITY=>GLOBAL AND PARTITION.', 44
   FROM (
 SELECT pt.object_owner,
        pt.object_name,
@@ -2215,10 +2316,11 @@ SELECT pt.object_owner,
  *
  * ------------------------- */
 
+-- (115)
 -- no stats
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_INDEX, 'INDEX', SYSTIMESTAMP, i.owner||'.'||i.index_name,
-       'Index lacks CBO Statistics.',
+       'Consider collecting Optimizer statistics for the indexes referenced in this query. Index lacks CBO Statistics. Also see Automatic Task ("auto optimizer stats collection" Does not Refresh Stale Index Statistics Unless Tables Statistics are Also Stale (Doc ID 1934741.1).',
        CASE
          WHEN '^^is_ebs.' = 'Y' THEN
            'Consider gathering table and index statistics using FND_STATS.GATHER_TABLE_STATS or coe_stats.sql.<br>'||CHR(10)||
@@ -2232,7 +2334,7 @@ SELECT :E_INDEX, 'INDEX', SYSTIMESTAMP, i.owner||'.'||i.index_name,
          ELSE
            'Consider gathering table and index statistics using DBMS_STATS.GATHER_TABLE_STATS.'||CHR(10)||
            'See <a target="MOS" href="^^doc_link.465787.1">465787.1</a>.'
-         END
+         END, 72
   FROM plan_table pt,
        dba_tables t,
        dba_indexes i
@@ -2248,10 +2350,11 @@ SELECT :E_INDEX, 'INDEX', SYSTIMESTAMP, i.owner||'.'||i.index_name,
    AND i.index_type NOT IN ('DOMAIN', 'LOB', 'FUNCTION-BASED DOMAIN')
    AND (i.last_analyzed IS NULL OR i.num_rows IS NULL);
 
+-- (116)
 -- more rows in index than its table
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_INDEX, 'INDEX', SYSTIMESTAMP, i.owner||'.'||i.index_name,
-       'Index appears to have more rows ('||i.num_rows||') than its table ('||t.num_rows||') by '||ROUND(100 * (i.num_rows - t.num_rows) / t.num_rows)||'%.',
+       'Check the statistics on the index in this query. Index appears to have more rows ('||i.num_rows||') than its table ('||t.num_rows||') by '||ROUND(100 * (i.num_rows - t.num_rows) / t.num_rows)||'%. See MOS Note Best Practices for Automatic Statistics Collection (Doc ID 377152.1).',
        CASE
          WHEN '^^is_ebs.' = 'Y' THEN
            'Consider gathering table and index statistics using FND_STATS.GATHER_TABLE_STATS or coe_stats.sql.<br>'||CHR(10)||
@@ -2265,7 +2368,7 @@ SELECT :E_INDEX, 'INDEX', SYSTIMESTAMP, i.owner||'.'||i.index_name,
          ELSE
            'Consider gathering table and index statistics using DBMS_STATS.GATHER_TABLE_STATS.'||CHR(10)||
            'See <a target="MOS" href="^^doc_link.465787.1">465787.1</a>.'
-         END
+         END, 29
   FROM plan_table pt,
        dba_tables t,
        dba_indexes i
@@ -2281,10 +2384,11 @@ SELECT :E_INDEX, 'INDEX', SYSTIMESTAMP, i.owner||'.'||i.index_name,
    AND i.num_rows > t.num_rows
    AND (i.num_rows - t.num_rows) > t.num_rows * 0.1;
 
+-- (117)
 -- clustering factor > rows in table
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_INDEX, 'INDEX', SYSTIMESTAMP, i.owner||'.'||i.index_name,
-       'Clustering factor of '||i.clustering_factor||' is larger than number of rows in its table ('||t.num_rows||') by more than '||ROUND(100 * (i.clustering_factor - t.num_rows) / t.num_rows)||'%.',
+       'Consider collecting fresh statistics. The Clustering factor of '||i.clustering_factor||' is larger than number of rows in its table ('||t.num_rows||') by '||ROUND(100 * (i.clustering_factor - t.num_rows) / t.num_rows)||'%. See MOS Note Best Practices for Automatic Statistics Collection (Doc ID 377152.1).',
        CASE
          WHEN '^^is_ebs.' = 'Y' THEN
            'Consider gathering table and index statistics using FND_STATS.GATHER_TABLE_STATS or coe_stats.sql.<br>'||CHR(10)||
@@ -2298,7 +2402,7 @@ SELECT :E_INDEX, 'INDEX', SYSTIMESTAMP, i.owner||'.'||i.index_name,
          ELSE
            'Consider gathering table and index statistics using DBMS_STATS.GATHER_TABLE_STATS.'||CHR(10)||
            'See <a target="MOS" href="^^doc_link.465787.1">465787.1</a>.'
-         END
+         END, 28
   FROM plan_table pt,
        dba_tables t,
        dba_indexes i
@@ -2313,12 +2417,13 @@ SELECT :E_INDEX, 'INDEX', SYSTIMESTAMP, i.owner||'.'||i.index_name,
    AND i.clustering_factor > t.num_rows
    AND (i.clustering_factor - t.num_rows) > t.num_rows * 0.1;
 
+-- (125)
 -- stats on zero while columns have value
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_INDEX, 'INDEX', SYSTIMESTAMP, i.owner||'.'||i.index_name,
-       'Index CBO statistics on 0 with indexed columns with value.',
+       'Consider gathering table statistics, or DROP and RE-CREATE index. Check this in conjunction with Bug 4055596.',
        'This index with zeroes in CBO index statistics contains columns for which there are values, so the index should not have statistics in zeroes.<br>'||CHR(10)||
-       'Possible Bug <a target="MOS" href="^^bug_link.4055596">4055596</a>. Consider gathering table statistics, or DROP and RE-CREATE index.'
+       'Possible Bug <a target="MOS" href="^^bug_link.4055596">4055596</a>. Consider gathering table statistics, or DROP and RE-CREATE index.', 11
   FROM plan_table pt,
        dba_tables t,
        dba_indexes i
@@ -2349,10 +2454,11 @@ SELECT NULL
    AND t.num_rows > tc.num_nulls
    AND (t.num_rows - tc.num_nulls) > t.num_rows * 0.1);
 
+-- (126)
 -- table/index stats out of sync
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_INDEX, 'INDEX', SYSTIMESTAMP, i.owner||'.'||i.index_name,
-       'Table/Index CBO statistics out of sync.',
+       'Review the timing and quality of statistics. Table/Index CBO statistics gap = '||TRUNC(ABS(t.last_analyzed - i.last_analyzed))||' day(s). Also see MOS Note Best Practices for Automatic Statistics Collection (Doc ID 377152.1).',
        CASE
          WHEN '^^is_ebs.' = 'Y' THEN
            'Table and index statistics were gathered '||TRUNC(ABS(t.last_analyzed - i.last_analyzed))||' day(s) appart,<br>'||CHR(10)||
@@ -2374,7 +2480,7 @@ SELECT :E_INDEX, 'INDEX', SYSTIMESTAMP, i.owner||'.'||i.index_name,
            'so they do not offer a consistent view to the CBO.<br>'||CHR(10)||
            'Consider gathering table and index statistics using DBMS_STATS.GATHER_TABLE_STATS using CASCADE=>TRUE.'||CHR(10)||
            'See also <a target="MOS" href="^^doc_link.465787.1">465787.1</a>.'
-         END
+         END, 26
   FROM plan_table pt,
        dba_tables t,
        dba_indexes i
@@ -2391,10 +2497,11 @@ SELECT :E_INDEX, 'INDEX', SYSTIMESTAMP, i.owner||'.'||i.index_name,
    AND i.last_analyzed IS NOT NULL
    AND ABS(t.last_analyzed - i.last_analyzed) > 1;
 
+-- (127)
 -- analyze 236935.1
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_INDEX, 'INDEX', SYSTIMESTAMP, i.owner||'.'||i.index_name,
-       'CBO statistics were either gathered using deprecated ANALYZE command or derived by aggregation from lower level objects.',
+       'Confirm that you are gathering statistics with DBM_STATS rather than ANALYZE. Also see MOS Note Best Practices for Automatic Statistics Collection (Doc ID 377152.1).',
        CASE
          WHEN '^^is_ebs.' = 'Y' THEN
            'When ANALYZE is used on a non-partitioned index, the global_stats column of the index statistics receives a value of ''NO''.<br>'||CHR(10)||
@@ -2412,7 +2519,7 @@ SELECT :E_INDEX, 'INDEX', SYSTIMESTAMP, i.owner||'.'||i.index_name,
            'When ANALYZE is used on a non-partitioned index, the global_stats column of the index statistics receives a value of ''NO''.<br>'||CHR(10)||
            'Consider gathering statistics using DBMS_STATS instead.<br>'||CHR(10)||
            'See <a target="MOS" href="^^doc_link.465787.1">465787.1</a>.'
-         END
+         END, 71
   FROM plan_table pt,
        dba_indexes i
  WHERE :health_checks = 'Y'
@@ -2424,10 +2531,11 @@ SELECT :E_INDEX, 'INDEX', SYSTIMESTAMP, i.owner||'.'||i.index_name,
    AND i.partitioned = 'NO'
    AND i.global_stats = 'NO';
 
+-- (107)
 -- derived stats
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_INDEX, 'INDEX', SYSTIMESTAMP, i.owner||'.'||i.index_name,
-       'CBO statistics were either gathered using deprecated ANALYZE command or derived by aggregation from lower level objects.',
+       'Check that you are not gathering statistics with ANALYZE. This is not valid. Collect using dbms_stats, coe_siebel_stats or fnd_Stats as needed. Also see MOS Note How to Move from ANALYZE to DBMS_STATS on Non-Partitioned Tables - Some Examples (Doc ID 237537.1).',
        CASE
          WHEN '^^is_ebs.' = 'Y' THEN
            'When statistics are derived by aggregation from lower level objects, the global_stats column of the index statistics receives a value of ''NO''.<br>'||CHR(10)||
@@ -2445,7 +2553,7 @@ SELECT :E_INDEX, 'INDEX', SYSTIMESTAMP, i.owner||'.'||i.index_name,
            'When statistics are derived by aggregation from lower level objects, the global_stats column of the index statistics receives a value of ''NO''.<br>'||CHR(10)||
            'Consider gathering statistics using DBMS_STATS instead.<br>'||CHR(10)||
            'See <a target="MOS" href="^^doc_link.465787.1">465787.1</a>.'
-         END
+         END, 28
   FROM plan_table pt,
        dba_indexes i
  WHERE :health_checks = 'Y'
@@ -2457,11 +2565,12 @@ SELECT :E_INDEX, 'INDEX', SYSTIMESTAMP, i.owner||'.'||i.index_name,
    AND i.partitioned = 'YES'
    AND i.global_stats = 'NO';
 
+-- (120)
 -- unusable indexes
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_INDEX, 'INDEX', SYSTIMESTAMP, i.owner||'.'||i.index_name,
-       'Unusable index.',
-       'Unusable indexes cannot be used by the CBO. This may cause Execution Plans to change.'
+       'Check the reason for any unusable indexes. Also see MOS Note Unusable Indexes Marked As Usable When TABLE_EXISTS_ACTION=TRUNCATE with Impdp (Doc ID 555909.1).',
+       'Unusable indexes cannot be used by the CBO. This may cause Execution Plans to change.', 48
   FROM plan_table pt,
        dba_indexes i
  WHERE :health_checks = 'Y'
@@ -2471,11 +2580,12 @@ SELECT :E_INDEX, 'INDEX', SYSTIMESTAMP, i.owner||'.'||i.index_name,
    AND i.partitioned = 'NO'
    AND i.status = 'UNUSABLE';
 
+-- (065)
 -- unusable index partitions
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_INDEX_PART, 'INDEX PARTITION', SYSTIMESTAMP, v.object_owner||'.'||v.object_name,
-       'Index with '||v.par_count||' unusable partition(s).',
-       'Unusable index partitions cannot be used by the CBO. This may cause Execution Plans to change.'
+       'Check why the '||v.par_count||' unusable index partition(s) in tables being accessed by your SQL is/are unusable. Also see MOS Note Diagnosing and Understanding Why a Query is Not Using an Index (Doc ID 67522.1).',
+       'Unusable index partitions cannot be used by the CBO. This may cause Execution Plans to change.',91
   FROM (
 SELECT pt.object_owner,
        pt.object_name,
@@ -2497,11 +2607,12 @@ SELECT pt.object_owner,
  WHERE :health_checks = 'Y'
    AND v.par_count > 0;
 
+-- (065)
 -- unusable index subpartitions
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_INDEX_PART, 'INDEX SUBPARTITION', SYSTIMESTAMP, v.object_owner||'.'||v.object_name,
-       'Index with '||v.par_count||' unusable subpartition(s).',
-       'Unusable index subpartitions cannot be used by the CBO. This may cause Execution Plans to change.'
+       'Check why the '||v.par_count||' unusable index sub-partition(s) in tables being accessed by your SQL is/are unusable. Also see MOS Note Diagnosing and Understanding Why a Query is Not Using an Index (Doc ID 67522.1).',
+       'Unusable index subpartitions cannot be used by the CBO. This may cause Execution Plans to change.', 90
   FROM (
 SELECT pt.object_owner,
        pt.object_name,
@@ -2523,11 +2634,12 @@ SELECT pt.object_owner,
  WHERE :health_checks = 'Y'
    AND v.par_count > 0;
 
+-- (067)
 -- invisible indexes
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_INDEX, 'INDEX', SYSTIMESTAMP, i.owner||'.'||i.index_name,
-       'Invisible index.',
-       'Invisible indexes cannot be used by the CBO. This may cause Execution Plans to change.'
+       'Check why the index(es) in tables being accessed by your SQL are invisible. Also see MOS Note Diagnosing and Understanding Why a Query is Not Using an Index (Doc ID 67522.1).',
+       'Invisible indexes cannot be used by the CBO. This may cause Execution Plans to change.', 90
   FROM plan_table pt,
        dba_indexes i
  WHERE :health_checks = 'Y'
@@ -2536,11 +2648,12 @@ SELECT :E_INDEX, 'INDEX', SYSTIMESTAMP, i.owner||'.'||i.index_name,
    AND pt.object_name = i.table_name
    AND i.visibility = 'INVISIBLE';
 
+-- (128)
 -- no column stats in single-column index
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_1COL_INDEX, '1-COL INDEX', SYSTIMESTAMP, i.index_name||'('||ic.column_name||')',
-       'Lack of CBO statistics in column of this single-column index.',
-       'To avoid CBO guessed statistics on this indexed column, gather table statistics and include this column in METHOD_OPT used.'
+       'Review the statistics of the single column in the index in this query. Also review MOS Note Histograms: An Overview (10g and Above) (Doc ID 1445372.1).',
+       'To avoid CBO guessed statistics on this indexed column, gather table statistics and include this column in METHOD_OPT used.', 32
   FROM plan_table pt,
        dba_indexes i,
        dba_ind_columns ic,
@@ -2567,12 +2680,13 @@ SELECT NULL
    AND ic2.index_name = i.index_name
    AND ic2.column_position = 2 );
 
+-- (129)
 -- NDV on column > num_rows in single-column index
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_1COL_INDEX, '1-COL INDEX', SYSTIMESTAMP, i.index_name||'('||ic.column_name||')',
-       'Single-column index with number of distinct values greater than number of rows by '||ROUND(100 * (tc.num_distinct - i.num_rows) / i.num_rows)||'%.',
+       'Check the sampling size and relevance of the statistics on the tables in this query. Single-column index with number of distinct values greater than number of rows by '||ROUND(100 * (tc.num_distinct - i.num_rows) / i.num_rows)||'%. Also see MOS Note Histograms: An Overview (10g and Above) (Doc ID 1445372.1).',
        'There cannot be a larger number of distinct values ('||tc.num_distinct||') in a column than actual rows ('||i.num_rows||') in the index.<br>'||CHR(10)||
-       'This is an inconsistency on this indexed column. Consider gathering table statistics using a large sample size.'
+       'This is an inconsistency on this indexed column. Consider gathering table statistics using a large sample size.', 39
   FROM plan_table pt,
        dba_indexes i,
        dba_ind_columns ic,
@@ -2600,13 +2714,14 @@ SELECT NULL
    AND ic2.index_name = i.index_name
    AND ic2.column_position = 2 );
 
+-- (130)
 -- NDV is zero but column has values in single-column index
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_1COL_INDEX, '1-COL INDEX', SYSTIMESTAMP, i.index_name||'('||ic.column_name||')',
-       'Single-column index with number of distinct value equal to zero in column with value.',
+       'Check the sampling size and relevance of the statistics on the tables in this query. Single-column index with number of distinct values equal to zero in column with value. Also see MOS Note Histograms: An Overview (10g and Above) (Doc ID 1445372.1).',
        'There should not be columns with value where the number of distinct values for the same column is zero.<br>'||CHR(10)||
        'Column has '||(i.num_rows - tc.num_nulls)||' rows with value while the number of distinct values for it is zero.<br>'||CHR(10)||
-       'This is an inconsistency on this indexed column. Consider gathering table statistics using a large sample size.'
+       'This is an inconsistency on this indexed column. Consider gathering table statistics using a large sample size.', 38
   FROM plan_table pt,
        dba_indexes i,
        dba_ind_columns ic,
@@ -2635,17 +2750,18 @@ SELECT NULL
    AND ic2.index_name = i.index_name
    AND ic2.column_position = 2 );
 
+-- (131)
 -- Bugs 4495422 or 9885553 NDV <> NDK in single-column index
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_1COL_INDEX, '1-COL INDEX', SYSTIMESTAMP, i.index_name||'('||ic.column_name||')',
-       'Number of distinct values ('||tc.num_distinct||') does not match number of distinct keys ('||i.distinct_keys||') by '||ROUND(100 * (i.distinct_keys - tc.num_distinct) / tc.num_distinct)||'%.',
+       'Review the possibility of bugs 4495422 or 9885553. The Number of distinct values ('||tc.num_distinct||') does not match the number of distinct keys ('||i.distinct_keys||') by '||ROUND(100 * (i.distinct_keys - tc.num_distinct) / tc.num_distinct)||'%. Review Bug Bug 9885553 - DBMS_STATS produces incorrect column NDV distinct values statistics (Doc ID 9885553.8).',
        CASE
          WHEN tc.data_type LIKE '%CHAR%' AND tc.num_buckets > 1 THEN
            'Possible Bug <a target="MOS" href="^^bug_link.4495422">4495422</a> or <a target="MOS" href="^^bug_link.9885553">9885553</a>.<br>'||CHR(10)||
            'This is an inconsistency on this indexed column. Gather fresh statistics with no histograms or adjusting DISTCNT and DENSITY using SET_COLUMN_statistics APIs.'
          ELSE
            'This is an inconsistency on this indexed column. Gather fresh statistics or adjusting DISTCNT and DENSITY using SET_COLUMN_statistics APIs.'
-         END
+         END, 50
   FROM plan_table pt,
        dba_indexes i,
        dba_ind_columns ic,
@@ -2675,10 +2791,11 @@ SELECT NULL
    AND ic2.index_name = i.index_name
    AND ic2.column_position = 2 );
 
+-- (132)
 -- index partitions with no stats
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_INDEX_PART, 'INDEX PARTITION', SYSTIMESTAMP, v.object_owner||'.'||v.object_name,
-       v.no_stats||' out of '||v.par_count||' partition(s) lack(s) CBO statistics.',
+       'Consider gathering statistics as needed. '||v.no_stats||' out of '||v.par_count||' partition(s) lack(s) CBO statistics. Also see MOS Note Best Practices for Automatic Statistics Collection (Doc ID 377152.1).',
        CASE
          WHEN '^^is_ebs.' = 'Y' THEN
            'Consider gathering statistics using FND_STATS.GATHER_TABLE_STATISTICS.<br>'||CHR(10)||
@@ -2692,7 +2809,7 @@ SELECT :E_INDEX_PART, 'INDEX PARTITION', SYSTIMESTAMP, v.object_owner||'.'||v.ob
          ELSE
            'Consider gathering statistics using DBMS_STATS.GATHER_TABLE_STATISTICS.<br>'||CHR(10)||
            'See <a target="MOS" href="^^doc_link.465787.1">465787.1</a>.'
-         END
+         END, 65
   FROM (
 SELECT pt.object_owner,
        pt.object_name,
@@ -2716,11 +2833,12 @@ SELECT pt.object_owner,
  WHERE :health_checks = 'Y'
    AND v.no_stats > 0;
 
+-- (133) 
 -- index partitions where num rows = 0
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_INDEX_PART, 'INDEX PARTITION', SYSTIMESTAMP, v.object_owner||'.'||v.object_name,
-       v.num_rows_zero||' out of '||v.par_count||' partition(s) with number of rows equal to zero according to partition''s CBO statistics.',
-       'If these index partitions are not empty, consider gathering table statistics using GRANULARITY=>GLOBAL AND PARTITION.'
+       'Consider gathering statistics on some partitions.'||v.num_rows_zero||' out of '||v.par_count||' partition(s) with number of rows equal to zero according to partition''s CBO statistics. Also see MOS Note Automatic Optimizer Statistics Collection on Partitioned Table (Doc ID 1592404.1).',
+       'If these index partitions are not empty, consider gathering table statistics using GRANULARITY=>GLOBAL AND PARTITION.', 42
   FROM (
 SELECT pt.object_owner,
        pt.object_name,
@@ -2744,12 +2862,13 @@ SELECT pt.object_owner,
  WHERE :health_checks = 'Y'
    AND v.num_rows_zero > 0;
 
+-- (134)
 -- index partitions with outdated stats
-INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection)
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
 SELECT :E_INDEX_PART, 'INDEX PARTITION', SYSTIMESTAMP, v.object_owner||'.'||v.object_name,
-       'Index contains partition(s) with index/partition CBO statistics out of sync for up to '||TRUNC(ABS(v.idx_last_analyzed - v.par_last_analyzed))||' day(s).',
+       'Consider re-gathering index partition statistics using GRANULARITY=>GLOBAL AND PARTITION. Index contains partition(s) with index/partition CBO statistics out of sync for up to '||TRUNC(ABS(v.idx_last_analyzed - v.par_last_analyzed))||' day(s). Also review MOS Note Global statistics - An Explanation (Doc ID 236935.1).',
        'Index and partition statistics were gathered up to '||TRUNC(ABS(v.idx_last_analyzed - v.par_last_analyzed))||' day(s) appart, so they do not offer a consistent view to the CBO.<br>'||CHR(10)||
-       'Consider re-gathering table statistics using GRANULARITY=>GLOBAL AND PARTITION.'
+       'Consider re-gathering table statistics using GRANULARITY=>GLOBAL AND PARTITION.', 64
   FROM (
 SELECT pt.object_owner,
        pt.object_name,
@@ -2775,6 +2894,64 @@ SELECT pt.object_owner,
  WHERE :health_checks = 'Y'
    AND ABS(v.idx_last_analyzed - v.par_last_analyzed) > 1;
 
+-- (135)
+-- table and index partitions do not match 14013094
+INSERT INTO plan_table (id, operation, object_alias, other_tag, remarks, projection,position)
+WITH idx AS (
+SELECT /*+ MATERIALIZE */
+       i.owner index_owner, i.index_name, i.table_owner, i.table_name, COUNT(*) index_partitions, 35
+  FROM plan_table pt,
+       dba_indexes i,
+       dba_ind_partitions ip
+ WHERE :health_checks = 'Y'
+   AND pt.object_type = 'INDEX'
+   AND pt.object_owner = i.owner
+   AND pt.object_name = i.index_name
+   AND i.partitioned = 'YES'
+   AND pt.object_owner = ip.index_owner
+   AND pt.object_name = ip.index_name
+ GROUP BY
+       i.owner, i.index_name, i.table_owner, i.table_name
+), tbl AS (
+SELECT /*+ MATERIALIZE */
+       t.owner table_owner, t.table_name, COUNT(*) table_partitions
+  FROM plan_table pt,
+       dba_tables t,
+       dba_tab_partitions tp
+ WHERE :health_checks = 'Y'
+   AND pt.object_type = 'TABLE'
+   AND pt.object_owner = t.owner
+   AND pt.object_name = t.table_name
+   AND t.partitioned = 'YES'
+   AND pt.object_owner = tp.table_owner
+   AND pt.object_name = tp.table_name
+ GROUP BY
+       t.owner, t.table_name
+), idx_tbl AS (
+SELECT /*+ MATERIALIZE */
+       idx.index_owner, idx.index_name, idx.table_owner, idx.table_name, idx.index_partitions partitions
+  FROM idx, tbl
+ WHERE idx.table_owner = tbl.table_owner
+   AND idx.table_name = tbl.table_name
+   AND idx.index_partitions = tbl.table_partitions
+)
+--SELECT idx_tbl.index_owner, idx_tbl.index_name, idx_tbl.table_owner, idx_tbl.table_name, COUNT(*)
+SELECT :E_INDEX_PART, 'INDEX PARTITION', SYSTIMESTAMP, idx_tbl.index_owner||'.'||idx_tbl.index_name,
+       'Check the statistics are correct. The index contains '||COUNT(*)||' partition(s) with number of rows out of sync for more than 10% to their corresponding Table partition(s). Possibly Bug 14013094 - DBMS_STATS places statistics in the wrong index partition (Doc ID 14013094.8).',
+       'Review Table and Index partition names and positions, then try to rule out Bug <a target="MOS" href="^^bug_link.14013094">14013094</a>.', 35
+  FROM idx_tbl,
+       dba_tab_statistics tps,
+       dba_ind_statistics ips
+ WHERE tps.owner = idx_tbl.table_owner
+   AND tps.table_name = idx_tbl.table_name
+   AND tps.object_type = 'PARTITION'
+   AND ips.owner = idx_tbl.index_owner
+   AND ips.index_name = idx_tbl.index_name
+   AND ips.object_type = 'PARTITION'
+   AND tps.partition_position = ips.partition_position
+   AND tps.partition_name != ips.partition_name
+ GROUP BY
+       idx_tbl.index_owner, idx_tbl.index_name, idx_tbl.table_owner, idx_tbl.table_name;
 
 -- setup to produce reports
 SET ECHO OFF FEED OFF VER OFF SHOW OFF HEA OFF LIN 2000 NEWP NONE PAGES 0 LONG 2000000 LONGC 2000 SQLC MIX TAB ON TRIMS ON TI OFF TIMI OFF ARRAY 100 NUMF "" SQLP SQL> SUF sql BLO . RECSEP OFF APPI OFF AUTOT OFF;
@@ -2881,6 +3058,7 @@ PRO
 PRO <tr>
 PRO <th>#</th>
 PRO <th>Type</th>
+PRO <th>Priority</th>
 PRO <th>Name</th>
 PRO <th>Observation</th>
 PRO <th>Details</th>
@@ -2888,10 +3066,13 @@ PRO </tr>
 PRO
 SELECT '<!-- '||TO_CHAR(SYSDATE, 'YYYY-MM-DD/HH24:MI:SS')||' -->' FROM dual;
 PRO <!-- Please Wait -->
-
+--
+-- Added PRIORITY SNC. 05.04.2019
+--
 SELECT CHR(10)||'<tr>'||CHR(10)||
        '<td class="r">'||ROWNUM||'</td>'||CHR(10)||
        '<td>'||v.object_type||'</td>'||CHR(10)||
+	   '<td>'||v.priority||'</td>'||CHR(10)||
        '<td>'||v.object_name||'</td>'||CHR(10)||
        '<td>'||v.observation||'</td>'||CHR(10)||
        '<td>'||v.more||'</td>'||CHR(10)||
@@ -2901,7 +3082,8 @@ SELECT /*+ NO_MERGE */
        operation object_type,
        other_tag object_name,
        remarks observation,
-       projection more
+       projection more,
+	   position priority
   FROM plan_table
  WHERE :health_checks = 'Y'
    AND id IS NOT NULL
@@ -2919,6 +3101,7 @@ PRO
 PRO <tr>
 PRO <th>#</th>
 PRO <th>Type</th>
+PRO <th>Priority</th>
 PRO <th>Name</th>
 PRO <th>Observation</th>
 PRO <th>Details</th>
@@ -4801,8 +4984,9 @@ PRO <th>#</th>
 PRO <th>Preference Name</th>
 PRO <th>Preference Value</th>
 PRO </tr>
+PRO </table>
 PRO
-PRO <table>
+REM PRO <table>
 /* -------------------------
  *
  * tables
@@ -5061,8 +5245,9 @@ PRO <th>Parameter Name</th>
 PRO <th>Parameter Value</th>
 PRO <th>Change Time</th>
 PRO </tr>
+PRO </table>
 PRO
-PRO <table>
+REM PRO <table>
 
 
 /* -------------------------
@@ -5551,11 +5736,11 @@ SELECT v.table_name,
        ROWNUM row_num,
        CHR(10)||'<tr>'||CHR(10)||
        '<td class="r">'||ROWNUM||'</td>'||CHR(10)||
-	   '<td class="c">'||v.constraint_name||'</td>'||CHR(10)||
+	   '<td>'||v.constraint_name||'</td>'||CHR(10)||
        '<td class="c">'||v.constraint_type||'</td>'||CHR(10)||
      --  '<td class="c">'||v.search_condition||'</td>'||CHR(10)||
        '<td class="r">'||v.r_owner||'</td>'||CHR(10)||
-       '<td class="r">'||v.r_constraint_name||'</td>'||CHR(10)||
+       '<td>'||v.r_constraint_name||'</td>'||CHR(10)||
        '<td class="r">'||v.delete_rule||'</td>'||CHR(10)||
        '<td class="r">'||v.status||'</td>'||CHR(10)||
        '<td class="r">'||v.deferrable||'</td>'||CHR(10)||
@@ -6845,7 +7030,7 @@ PRO
 PRO <style type="text/css">
 PRO body {font:10pt Arial,Helvetica,Verdana,Geneva,sans-serif; color:black; background:white;}
 PRO a {font-weight:bold; color:#663300;}
-PRO pre {font:8pt Monaco,"Courier New",Courier,monospace;} /* for code */
+PRO pre {font-family: monospace,monospace; white-space: pre; font:8pt Monaco,"Courier New",Courier,monospace,monospace;} /* for code */
 PRO h1 {font-size:16pt; font-weight:bold; color:#336699;}
 PRO h2 {font-size:14pt; font-weight:bold; color:#336699;}
 PRO h3 {font-size:12pt; font-weight:bold; color:#336699;}
@@ -6945,10 +7130,16 @@ SELECT '<!-- '||TO_CHAR(SYSDATE, 'YYYY-MM-DD/HH24:MI:SS')||' -->' FROM dual;
 PRO <!-- Please Wait -->
 PRO <pre>
 
-SELECT RPAD('Inst: '||v.inst_id, 9)||' '||RPAD('Child: '||v.child_number, 11) inst_child, t.plan_table_output
-  FROM gv$sql v,
-       TABLE(DBMS_XPLAN.DISPLAY('gv$sql_plan_statistics_all', NULL, 'ADVANCED ALLSTATS LAST', 'inst_id = '||v.inst_id||' AND sql_id = '''||v.sql_id||''' AND child_number = '||v.child_number)) t
- WHERE v.sql_id = :sql_id
+SELECT 
+  RPAD('Inst: '||v.inst_id, 9)
+  ||' '
+  ||RPAD('Child: '||v.child_number, 11) inst_child, 
+  t.plan_table_output
+FROM 
+  gv$sql v,
+  TABLE(DBMS_XPLAN.DISPLAY('gv$sql_plan_statistics_all', NULL, 'ADVANCED ALLSTATS LAST', 'inst_id = '||v.inst_id||' AND sql_id = '''||v.sql_id||''' AND child_number = '||v.child_number)) t
+ WHERE 
+   v.sql_id = :sql_id
    AND v.loaded_versions > 0;
 
 PRO </pre>
@@ -6967,7 +7158,7 @@ SELECT '<!-- '||TO_CHAR(SYSDATE, 'YYYY-MM-DD/HH24:MI:SS')||' -->' FROM dual;
 PRO <!-- Please Wait -->
 PRO <pre>
 
-SELECT RPAD('Inst: '||v.inst_id, 9)||' '||RPAD('Child: '||v.child_number, 11) inst_child, t.plan_table_output
+SELECT RPAD('Inst: '||v.inst_id, 9)||' '||RPAD('Child: '||v.child_number, 11) inst_child, trim(t.plan_table_output)
   FROM gv$sql v,
        TABLE(DBMS_XPLAN.DISPLAY('gv$sql_plan_statistics_all', NULL, 'ADVANCED ALLSTATS', 'inst_id = '||v.inst_id||' AND sql_id = '''||v.sql_id||''' AND child_number = '||v.child_number)) t
  WHERE v.sql_id = :sql_id
@@ -7209,18 +7400,23 @@ SPO OFF;
 ALTER SESSION SET SQL_TRACE = FALSE;
 --ALTER SESSION SET STATISTICS_LEVEL = 'TYPICAL';
 
--- get udump directory path
+-- get udump directory path and trace location
 COL udump_path NEW_V udump_path FOR A500;
+col adr_home_trace new_v adr_home_trace for a500;
 SELECT value||DECODE(INSTR(value, '/'), 0, '\', '/') udump_path FROM v$parameter2 WHERE name = 'user_dump_dest';
 
+var adr_home_trace varchar2(500); 
+select value adr_home_trace from v$diag_info where name='ADR Home';
+exec :adr_home_trace := '^^adr_home_trace';
+
 -- tkprof for trace from execution of tool in case someone reports slow performance in tool
-HOS tkprof ^^udump_path.*^^script._^^unique_id.*.trc ^^files_prefix._tkprof_nosort.txt
-HOS tkprof ^^udump_path.*^^script._^^unique_id.*.trc ^^files_prefix._tkprof_sort.txt sort=prsela exeela fchela
+--HOS tkprof ^^udump_path.*^^script._^^unique_id.*.trc ^^files_prefix._tkprof_nosort.txt
+--HOS tkprof ^^udump_path.*^^script._^^unique_id.*.trc ^^files_prefix._tkprof_sort.txt sort=prsela exeela fchela
 
 -- windows workaround (copy below will error out on linux and unix)
-HOS copy ^^udump_path.*^^script._^^unique_id.*.trc ^^udump_path.^^script._^^unique_id..trc
-HOS tkprof ^^udump_path.^^script._^^unique_id..trc ^^files_prefix._tkprof_nosort.txt
-HOS tkprof ^^udump_path.^^script._^^unique_id..trc ^^files_prefix._tkprof_sort.txt sort=prsela exeela fchela
+--HOS copy ^^udump_path.*^^script._^^unique_id.*.trc ^^udump_path.^^script._^^unique_id..trc
+--HOS tkprof ^^udump_path.^^script._^^unique_id..trc ^^files_prefix._tkprof_nosort.txt
+--HOS tkprof ^^udump_path.^^script._^^unique_id..trc ^^files_prefix._tkprof_sort.txt sort=prsela exeela fchela
 
 SPO ^^script..log APP
 SELECT 'END: '||TO_CHAR(SYSDATE, 'YYYY-MM-DD/HH24:MI:SS') FROM dual;
@@ -7228,7 +7424,7 @@ SPO OFF;
 
 /**************************************************************************************************
  *
- * end_common: from begin_common to end_common sqlhc.sql and sqlhcxec.sql are identical
+ *end_common: from begin_common to end_common sqlhc.sql and sqlhcxec.sql are identical
  *
  **************************************************************************************************/
 
@@ -7246,27 +7442,77 @@ HOS zip -m ^^files_prefix._9_log.zip ^^files_prefix._5_sql_monitor.sql
 HOS zip -m ^^files_prefix..zip ^^files_prefix._9_log.zip
 HOS zip -m ^^files_prefix._5_sql_monitor.zip ^^files_prefix._*_5_sql_monitor.html
 HOS zip -m ^^files_prefix..zip ^^files_prefix._5_sql_monitor.zip
+--
+-- SQL Tuning Advisor
+--
+--spool sqlhc_sta.log
+@@sqlhc_sta.sql ^^input_license ^^input_sql_id
+SET TERMOUT ON
+--PRO Ignore MV or RENAME error below
+SET TERMOUT OFF
+column host_cmd new_v host_cmd for a2000;
+set linesize 200
+select case(select count(*) is_windows from v$database where lower(platform_name) like '%windows%')
+  when 0 then 'mv sqlhc_sta_^^input_sql_id..out  ^^files_prefix._10_sql_tuning_advisor.out'
+  else 'rename sqlhc_sta_^^input_sql_id..out ^^files_prefix._10_sql_tuning_advisor.out'
+  end host_cmd
+  from dual;
+host ^^host_cmd.;
+--host mv sqlhc_sta_^^input_sql_id..out  ^^files_prefix._10_sql_tuning_advisor.out
+--host rename sqlhc_sta_^^input_sql_id..out ^^files_prefix._10_sql_tuning_advisor.out
 
+HOS zip -m ^^files_prefix..zip ^^files_prefix._10_sql_tuning_advisor.out
+--
 -- generate DBMS_SQLDIAG.DUMP_TRACE 10053. this api is called down here in case it disconnects.
-EXEC DBMS_APPLICATION_INFO.SET_CLIENT_INFO('^^method.: DBMS_SQLDIAG.DUMP_TRACE - ' || TO_CHAR(SYSDATE, 'YYYY-MM-DD/HH24:MI:SS'));
+--
+EXEC DBMS_APPLICATION_INFO.SET_CLIENT_INFO('^^method.: DBMS_SQLDIAG.DUMP_TRACE - ' || TO_CHAR(SYSDATE, 'YYYY-MM-DD/HH24:MI:SS');
+SET TERMOUT ON
+
 BEGIN
   IF '^^rdbms_version.' >= '11.2' THEN
+    dbms_output.put_line ('Tracing ^^sql_id');
     DBMS_SQLDIAG.DUMP_TRACE (
-      p_sql_id    => :sql_id,
+      p_sql_id    => '^^sql_id.',
       p_component => 'Optimizer',
       p_file_id   => 'DBMS_SQLDIAG_10053_^^unique_id.');
   END IF;
 END;
 /
+
+SET TERMOUT OFF
 EXEC DBMS_APPLICATION_INFO.SET_CLIENT_INFO('^^method.: DBMS_SQLDIAG.DUMP_TRACE Done - ' || TO_CHAR(SYSDATE, 'YYYY-MM-DD/HH24:MI:SS'));
 
 -- copy DBMS_SQLDIAG.DUMP_TRACE 10053
-SET TERM ON;
-PRO Ignore CP or COPY error below
-SET TERM OFF;
-HOS cp ^^udump_path.*_DBMS_SQLDIAG_10053_^^unique_id.*.trc   ^^files_prefix._6_10053_trace_from_cursor.trc
-HOS copy ^^udump_path.*_DBMS_SQLDIAG_10053_^^unique_id.*.trc ^^files_prefix._6_10053_trace_from_cursor.trc
+SET TERMOUT ON;
+-- PRO Ignore CP or COPY error below
+column host_cmd new_v host_cmd for a2000;
+set linesize 200
+select case(select count(*) is_windows from v$database where lower(platform_name) like '%windows%')
+  when 0 then 'cp ^^adr_home_trace./trace/*_DBMS_SQLDIAG_10053_^^unique_id.*.trc ./^^files_prefix._6_10053_trace_from_cursor.trc'
+  else 'copy ^^adr_home_trace.\trace\*_DBMS_SQLDIAG_10053_^^unique_id.*.trc ^^files_prefix._6_10053_trace_from_cursor.trc'
+  end host_cmd
+  from dual;
+host ^^host_cmd.;
+-- host cp   ^^adr_home_trace./trace/*_DBMS_SQLDIAG_10053_^^unique_id.*.trc ^^files_prefix._6_10053_trace_from_cursor.trc
+-- host copy ^^adr_home_trace.\trace\*_DBMS_SQLDIAG_10053_^^unique_id.*.trc ^^files_prefix._6_10053_trace_from_cursor.trc
+
 HOS zip -m ^^files_prefix..zip ^^files_prefix._6_10053_trace_from_cursor.trc
+--HOS zip -m ^^adr_home_trace./trace/*_DBMS_SQLDIAG_10053_^^unique_id.*.trc
+--
+-- Collect the test case if possible (not on PDB)
+-- Parameter 1 is not used in the subroutine sqlhc_tcb.sql
+--
+@@sqlhc_tcb.sql "^^input_license." "^^sql_id." "SQL_TCB_DIR"
+column cp_source_files new_v cp_source_files format a500;
+select case ( select 0 from dual) 
+  when 0 then 'cp -v '||directory_path||'/oratcb*^^sql_id.*.* .'  
+  else 'touch ./oratcb_^^sql_id.NO_TCB_ON_PDB' end cp_source_files from dba_directories where directory_name='SQL_TCB_DIR';
+host ^^cp_source_files.
+host zip -m ^^files_prefix._11_tcb.zip ./oratcb*^^sql_id.*.* ./sqlhc_tcb_^^sql_id..out
+host zip -m ^^files_prefix..zip ^^files_prefix._11_tcb.zip
+--
+-- End Collect the test case
+--
 SET TERM ON;
 PRO
 PRO ^^files_prefix..zip has been created.
@@ -7286,4 +7532,22 @@ PRO SQLDX files have been added to &&files_prefix..zip
 PRO
 HOS unzip -l &&files_prefix..zip
 CL COL;
-UNDEF 1 2 method script mos_doc doc_ver doc_date doc_link bug_link input_parameter input_sql_id input_license unique_id sql_id signature signaturef license udump_path sqldx_prefix sqldx_output;
+
+set echo off verify off head off
+spool exec_planx_&&files_prefix..sql
+select 'PRO Running planx script' from dual;
+select '@util_planx Y '|| :sql_id from dual;
+select 'PRO Generating SQL Monitor reports' from dual;
+select '@rwp_sqlmonreport '|| :sql_id from dual;
+select 'PRO Zip planx and sqlmon output' from dual;
+select 'HOS zip -m &&files_prefix..zip planx*' || :sql_id || '*txt' from dual;
+select 'HOS zip -m &&files_prefix..zip rwp*'|| :sql_id || '*.zip' from dual;
+select 'HOS zip -m &&files_prefix..zip exec_planx*'|| :sql_id || '*.sql' from dual;
+spool off 
+@exec_planx_&&files_prefix..sql
+set echo on verify on head on
+
+UNDEF 1 2 method script mos_doc doc_ver doc_date doc_link bug_link input_parameter input_sql_id input_license unique_id sql_id signature signaturef license udump_path adr_home_trace sqldx_prefix sqldx_output;
+@?/rdbms/admin/sqlsessend.sql
+
+
