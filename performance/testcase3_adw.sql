@@ -11,9 +11,11 @@ select to_char(sysdate, 'SSSSS') time1 from dual;
  set termout off
  set echo off verify off
 
- --for ADW to use hints
- --alter session set optimizer_ignore_hints=false;
+--for ADW to use hints
+--alter session set optimizer_ignore_hints=false;
+-- alter session set optimizer_ignore_parallel_hints = false;
  --/*+ no_result_cache */  for individual SQLs
+
 
 
 --### SECTION 3: DEFINE THE BIND VARIABLES 
@@ -39,6 +41,9 @@ set serveroutput off
 -- 'YYYY-MM-DD.HH24.MI.SS.FF6') ,WRK_ITM_ASSGN_HI01.CREATION_TIMESTAMP  from WRK_ITM_ASSGN_HIST WRK_ITM_ASSGN_HI01 where (WRK_ITM_ASSGN_HI01.TYPE_CODE=:b0 and WRK_ITM_ASSGN_HI01.IDENTIFIER=:b1)
 --  order by WRK_ITM_ASSGN_HI01.ADJUDICATION_NBR desc ,WRK_ITM_ASSGN_HI01.SEQUENCE_NUMBER desc ,WRK_ITM_ASSGN_HI01.CREATION_TIMESTAMP desc
 --  /
+--select /*+ monitor parallel(64) no_result_cache opt_param('_optimizer_group_by_placement' 'false') opt_param('_fix_control' '33157188:OFF') */
+--select /*+ monitor opt_param('_fix_control' '16622801:0 13848786:0') */
+
 -- select /*+ MONITOR */ /* baseline 32 */ max(object_id), min(object_id), sum(object_id) from all_objects;
 
 
