@@ -11,7 +11,6 @@
 
 
 
-PRO Enter SQL_ID (required)
 DEF sqlmon_sqlid = '&&1';
 DEF sqlmon_date_mask = 'YYYYMMDDHH24MISS';
 DEF sqlmon_text = 'Y';
@@ -229,8 +228,6 @@ SELECT RPAD('Inst: '||v.inst_id, 9)||' '||RPAD('Child: '||v.child_number, 11) in
  AND v.loaded_versions > 0;
 SPO OFF;
 SET ECHO OFF FEED 6 VER ON SHOW OFF HEA ON LIN 80 NEWP 1 PAGES 14 LONG 80 LONGC 80 SQLC MIX TAB ON TRIMS OFF TI OFF TIMI OFF ARRAY 15 NUMF "" SQLP SQL> SUF sql BLO . RECSEP WR APPI OFF AUTOT OFF;
-
-@perfhub.sql 
 
 SET TERM ON
 
